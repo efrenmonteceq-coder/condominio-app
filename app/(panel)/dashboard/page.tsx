@@ -464,121 +464,308 @@ if (rol === "DIRECTIVA") {
 
   }
 
-  // 🔥 DASHBOARD RESIDENTE
+ // 🔥 DASHBOARD RESIDENTE
 
-  if (rol === "RESIDENTE") {
-
+if (rol === "RESIDENTE") {
   return (
-
     <>
-    
+      {/* ==========================================
+          RESIDENTE - ESCRITORIO
+          ========================================== */}
+
+      <div className="residente-desktop">
         <div
-  style={{
-    background:
-      "linear-gradient(135deg,#2563eb,#1d4ed8)",
-    borderRadius: 28,
-    padding:
-      "35px 40px",
-    marginBottom: 30,
-    color:
-      "#fff",
-  }}
->  
+          style={{
+            background:
+              "linear-gradient(135deg,#2563eb,#1d4ed8)",
+            borderRadius: 28,
+            padding: "35px 40px",
+            marginBottom: 30,
+            color: "#fff",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 36,
+              margin: 0,
+            }}
+          >
+            Bienvenido residente
+          </h1>
 
-            <h1
-              style={{
-                fontSize: 36,
-                margin: 0,
-              }}
-            >
-              Bienvenido residente
-            </h1>
+          <p
+            style={{
+              marginTop: 12,
+              color: "#dbeafe",
+            }}
+          >
+            Consulta tu estado financiero,
+            reservas y comprobantes.
+          </p>
+        </div>
 
-            <p
-              style={{
-                marginTop: 12,
-                color:
-                  "#dbeafe",
-              }}
-            >
-              Consulta tu estado financiero,
-              reservas y comprobantes.
-            </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit,minmax(250px,1fr))",
+            gap: 20,
+          }}
+        >
+          <CardPremium
+            titulo="💰 Estado de Cuenta"
+            valor="Ver"
+            color="#16a34a"
+            onClick={() =>
+              router.push("/estado-cuenta")
+            }
+          />
+
+          <CardPremium
+            titulo="📄 Mis Comprobantes"
+            valor="Ver"
+            color="#2563eb"
+            onClick={() =>
+              router.push("/pagos")
+            }
+          />
+
+          <CardPremium
+            titulo="📅 Mis Reservas"
+            valor="Ver"
+            color="#7c3aed"
+            onClick={() =>
+              router.push(
+                "/reservas?solo=historial"
+              )
+            }
+          />
+
+          <CardPremium
+            titulo="🚗 Mis Visitas"
+            valor="Ver"
+            color="#f59e0b"
+            onClick={() =>
+              router.push(
+                "/visitas?solo=historial"
+              )
+            }
+          />
+
+          <CardPremium
+            titulo="📢 Novedades"
+            valor="Ver"
+            color="#dc2626"
+            onClick={() =>
+              router.push(
+                "/novedades?solo=historial"
+              )
+            }
+          />
+        </div>
+      </div>
+
+      {/* ==========================================
+          RESIDENTE - MÓVIL
+          ========================================== */}
+
+      <div className="residente-mobile">
+
+        {/* CABECERA */}
+
+        <div className="residente-mobile-header">
+          <div className="residente-mobile-saludo">
+            <div className="residente-mobile-avatar">
+              👤
+            </div>
+
+            <div>
+              <div className="residente-mobile-hola">
+                ¡Hola!
+              </div>
+
+              <div className="residente-mobile-nombre">
+                {usuario.nombre || "Residente"}
+              </div>
+
+              <div className="residente-mobile-vivienda">
+                🏠 Tu vivienda
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ACCIONES PRINCIPALES */}
+
+        <div className="residente-mobile-grid">
+
+          <button
+            className="residente-mobile-card residente-card-verde"
+            onClick={() =>
+              router.push("/estado-cuenta")
+            }
+          >
+            <div className="residente-mobile-icon">
+              💰
+            </div>
+
+            <div className="residente-mobile-title">
+              Estado de cuenta
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Ver mi estado financiero
+            </div>
+
+            <div className="residente-mobile-arrow">
+              →
+            </div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-azul"
+            onClick={() =>
+              router.push("/pagos")
+            }
+          >
+            <div className="residente-mobile-icon">
+              📄
+            </div>
+
+            <div className="residente-mobile-title">
+              Mis comprobantes
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Ver mis comprobantes
+            </div>
+
+            <div className="residente-mobile-arrow">
+              →
+            </div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-naranja"
+            onClick={() =>
+              router.push(
+                "/reservas?solo=historial"
+              )
+            }
+          >
+            <div className="residente-mobile-icon">
+              📅
+            </div>
+
+            <div className="residente-mobile-title">
+              Mis reservas
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Ver mis reservas
+            </div>
+
+            <div className="residente-mobile-arrow">
+              →
+            </div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-morado"
+            onClick={() =>
+              router.push(
+                "/visitas?solo=historial"
+              )
+            }
+          >
+            <div className="residente-mobile-icon">
+              🚗
+            </div>
+
+            <div className="residente-mobile-title">
+              Mis visitas
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Ver mis visitas
+            </div>
+
+            <div className="residente-mobile-arrow">
+              →
+            </div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-rojo residente-card-novedades"
+            onClick={() =>
+              router.push(
+                "/novedades?solo=historial"
+              )
+            }
+          >
+            <div className="residente-mobile-icon">
+              📢
+            </div>
+
+            <div>
+              <div className="residente-mobile-title">
+                Novedades
+              </div>
+
+              <div className="residente-mobile-subtitle">
+                Noticias de la urbanización
+              </div>
+            </div>
+
+            <div className="residente-mobile-arrow">
+              →
+            </div>
+          </button>
+
+        </div>
+
+        {/* RESUMEN */}
+
+        <div className="residente-mobile-resumen">
+
+          <div className="residente-mobile-resumen-title">
+            📊 Resumen de hoy
+          </div>
+
+          <div className="residente-mobile-resumen-grid">
+
+            <div className="residente-mobile-mini">
+              <span>📅</span>
+              <strong>{reservasHoy}</strong>
+              <small>Reservas hoy</small>
+            </div>
+
+            <div className="residente-mobile-mini">
+              <span>🚗</span>
+              <strong>{visitasHoy}</strong>
+              <small>Visitas hoy</small>
+            </div>
+
+            <div className="residente-mobile-mini">
+              <span>📢</span>
+              <strong>{novedades}</strong>
+              <small>Novedades</small>
+            </div>
+
+            <div className="residente-mobile-mini">
+              <span>💰</span>
+              <strong>{pagosPendientes}</strong>
+              <small>Pagos pendientes</small>
+            </div>
 
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit,minmax(250px,1fr))",
-              gap: 20,
-            }}
-          >
+        </div>
 
-            <CardPremium
-              titulo="💰 Estado de Cuenta"
-              valor="Ver"
-              color="#16a34a"
-              onClick={() =>
-                router.push(
-                  "/estado-cuenta"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="📄 Mis Comprobantes"
-              valor="Ver"
-              color="#2563eb"
-              onClick={() =>
-                router.push(
-                  "/pagos"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="📅 Mis Reservas"
-              valor="Ver"
-              color="#7c3aed"
-              onClick={() =>
-                router.push(
-                  "/reservas?solo=historial"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="🚗 Mis Visitas"
-              valor="Ver"
-              color="#f59e0b"
-              onClick={() =>
-                router.push(
-                  "/visitas?solo=historial"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="📢 Novedades"
-              valor="Ver"
-              color="#dc2626"
-              onClick={() =>
-                router.push(
-                  "/novedades?solo=historial"
-                )
-              }
-            />
-
-                   </div>
-      </>
-
-    );
-
+      </div>
+    </>
+  );
 }
-
-
 
   // 🔥 DASHBOARD GUARDIA
 

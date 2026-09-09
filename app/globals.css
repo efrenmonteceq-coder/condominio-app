@@ -24,3 +24,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* =========================================
+   RENALIX - CONTENIDO PRINCIPAL
+   ========================================= */
+
+.panel-main {
+  padding: 25px 25px 25px 270px;
+}
+
+/* =========================================
+   RENALIX - VISTA MÓVIL REAL
+   ========================================= */
+
+@media (max-width: 680px) {
+  .panel-main {
+    padding: 25px !important;
+  }
+}

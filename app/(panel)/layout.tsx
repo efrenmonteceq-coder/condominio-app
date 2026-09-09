@@ -16,14 +16,14 @@ export default function PanelLayout({
       <Menu />
 
       <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: "100vh",
-          boxSizing: "border-box",
-          padding: "25px 25px 25px 270px",
-        }}
-      >
+  className="panel-main"
+  style={{
+    flex: 1,
+    minWidth: 0,
+    minHeight: "100vh",
+    boxSizing: "border-box",
+  }}
+>
         {children}
       </main>
     </div>

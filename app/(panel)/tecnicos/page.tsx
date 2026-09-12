@@ -388,7 +388,7 @@ if (rol === "RESIDENTE") {
                 "#111827",
             }}
           >
-            Técnicos y Servicios
+            Ecosistema de Servicios
 
              <div>
               ROL: {rol}
@@ -404,7 +404,7 @@ if (rol === "RESIDENTE") {
                 "#6b7280",
             }}
           >
-            Marketplace residencial de técnicos especializados
+            Encuentra profesionales, servicios y negocios de tu comunidad.
           </p>
 
         </div>
@@ -454,7 +454,7 @@ if (rol === "RESIDENTE") {
               "#111827",
           }}
         >
-          Buscar técnicos
+          Buscar profesionales y servicios
         </h2>
 
         <div
@@ -467,7 +467,7 @@ if (rol === "RESIDENTE") {
         >
 
           <input
-            placeholder="Buscar técnico o especialidad"
+            placeholder="Buscar profesional, servicio o especialidad"
             value={busqueda}
             onChange={(e) =>
               setBusqueda(
@@ -838,7 +838,7 @@ setMisServicios(
               borderRadius: 20,
             }}
           >
-            No existen técnicos disponibles
+            No existen profesionales o servicios disponibles
           </div>
 
         ) : (

@@ -564,8 +564,8 @@ transform: "translateX(0)",
 
             <MenuItem
               href="/tecnicos"
-              icon="🔧"
-              label="Técnicos"
+              icon="🌐"
+              label="Ecosistema de Servicios"
             />
 
             {(
@@ -579,7 +579,7 @@ transform: "translateX(0)",
     <MenuItem
       href="/activar-por-pagos"
       icon="💳"
-      label="Gestión Técnicos"
+      label="Gestión de Servicios"
     />
 
     {rol === "GUARDIA" && (

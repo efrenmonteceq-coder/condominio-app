@@ -30,10 +30,10 @@ function VisitasContenido() {
     "solo"
   ) === "historial";  
 
+  // Fecha local del dispositivo (Ecuador), sin conversión a UTC.
+  const ahoraLocal = new Date();
   const hoy =
-    new Date()
-      .toISOString()
-      .split("T")[0];
+    `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, "0")}-${String(ahoraLocal.getDate()).padStart(2, "0")}`;
 
   
   const rol =
@@ -118,6 +118,26 @@ const [
 ] = useState<
   Record<string, number>
 >({});
+
+const [
+  fotoSeleccionada,
+  setFotoSeleccionada
+] = useState<Record<string, File | null>>({});
+
+const [
+  fotoPreview,
+  setFotoPreview
+] = useState<Record<string, string>>({});
+
+const [
+  subiendoFoto,
+  setSubiendoFoto
+] = useState<Record<string, boolean>>({});
+
+const [
+  fotoUrls,
+  setFotoUrls
+] = useState<Record<string, string>>({});
 
     
   // 🔥 LOAD
@@ -222,6 +242,34 @@ if (error) {
 }
 
 setVisitas(data || []);
+
+    // 🔐 El bucket es privado: generamos URLs temporales solo para las visitas visibles.
+    const urls: Record<string, string> = {};
+
+    await Promise.all(
+      (data || []).map(async (visita: any) => {
+        if (!visita.foto_evidencia) return;
+
+        const { data: signedData, error: signedError } =
+          await supabase.storage
+            .from("visitas-fotos")
+            .createSignedUrl(visita.foto_evidencia, 60 * 60);
+
+        if (signedError) {
+          console.error(
+            "ERROR GENERANDO URL DE FOTO:",
+            signedError
+          );
+          return;
+        }
+
+        if (signedData?.signedUrl) {
+          urls[visita.id] = signedData.signedUrl;
+        }
+      })
+    );
+
+    setFotoUrls(urls);
   };
 
   // 🔥 RESIDENTES
@@ -319,20 +367,32 @@ setVisitas(data || []);
     const pin =
       generarPin();
 
+      // Construir la fecha/hora en horario LOCAL,
+      // para que una visita pueda cruzar correctamente la medianoche.
+      const [anio, mes, dia] =
+        fechaVisita.split("-").map(Number);
+      const [hora, minuto] =
+        horaIngreso.split(":").map(Number);
+
       const fechaInicio =
-  new Date(
-    `${fechaVisita}T${horaIngreso}`
-  );
+        new Date(
+          anio,
+          mes - 1,
+          dia,
+          hora,
+          minuto,
+          0,
+          0
+        );
 
-const fechaExpiracion =
-
-  new Date(
-    fechaInicio.getTime() +
-    horasVigencia *
-      60 *
-      60 *
-      1000
-  );
+      const fechaExpiracion =
+        new Date(
+          fechaInicio.getTime() +
+          horasVigencia *
+            60 *
+            60 *
+            1000
+        );
 
 const residenteActual =
   residentes.find(
@@ -566,6 +626,74 @@ const totalIntentos =
 
 };
 
+// 🔥 SUBIR FOTO DE EVIDENCIA
+
+const subirFotoEvidencia =
+  async (visita: any) => {
+
+  const archivo =
+    fotoSeleccionada[visita.id];
+
+  if (!archivo) {
+    alert("📸 Primero tome la fotografía de evidencia.");
+    return null;
+  }
+
+  setSubiendoFoto((prev) => ({
+    ...prev,
+    [visita.id]: true,
+  }));
+
+  try {
+    const extension =
+      archivo.name.split(".").pop()?.toLowerCase() || "jpg";
+
+    const nombreArchivo =
+      `evidencia-${Date.now()}.${extension}`;
+
+    const ruta =
+      `${visita.condominio_id}/${visita.id}/${nombreArchivo}`;
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from("visitas-fotos")
+        .upload(ruta, archivo, {
+          contentType: archivo.type,
+          upsert: false,
+        });
+
+    if (uploadError) {
+      console.error("ERROR SUBIENDO FOTO:", uploadError);
+      alert("No se pudo guardar la fotografía de evidencia.");
+      return null;
+    }
+
+    const { error: updateError } =
+      await supabase
+        .from("visitas")
+        .update({
+          foto_evidencia: ruta,
+        })
+        .eq("id", visita.id);
+
+    if (updateError) {
+      console.error("ERROR GUARDANDO FOTO EN VISITA:", updateError);
+      await supabase.storage
+        .from("visitas-fotos")
+        .remove([ruta]);
+      alert("La fotografía se subió, pero no pudo quedar vinculada a la visita.");
+      return null;
+    }
+
+    return ruta;
+  } finally {
+    setSubiendoFoto((prev) => ({
+      ...prev,
+      [visita.id]: false,
+    }));
+  }
+};
+
 // 🔥 APROBAR
 
 const aprobarIngreso =
@@ -589,25 +717,38 @@ const aprobarIngreso =
     );
 
   if (!correcto) {
-
     await registrarPinIncorrecto(
       visita
     );
     return;
-    
+  }
+
+  // 📸 Para GUARDIA, la fotografía es evidencia obligatoria.
+  if (rol === "GUARDIA" && !visita.foto_evidencia) {
+    const rutaFoto =
+      await subirFotoEvidencia(visita);
+
+    if (!rutaFoto) {
+      return;
+    }
   }
 
   // 🔥 ACTUALIZAR VISITA
 
-  await supabase
-    .from("visitas")
-    .update({
+  const { error: updateError } =
+    await supabase
+      .from("visitas")
+      .update({
+        estado:
+          "INGRESÓ",
+      })
+      .eq("id", id);
 
-      estado:
-        "INGRESÓ",
-
-    })
-    .eq("id", id);
+  if (updateError) {
+    console.error("ERROR ACTUALIZANDO VISITA:", updateError);
+    alert("No se pudo aprobar el ingreso.");
+    return;
+  }
 
   // 🔥 AUDITORÍA APROBADO
 
@@ -647,7 +788,9 @@ const aprobarIngreso =
         "ACCESO APROBADO",
 
       observacion:
-        "PIN válido"
+        rol === "GUARDIA"
+          ? "PIN válido y fotografía de evidencia registrada"
+          : "PIN válido"
 
     });
 
@@ -660,6 +803,87 @@ const aprobarIngreso =
 
 };
 
+  // 🔴 RECHAZAR ACCESO
+
+  const rechazarAcceso =
+    async (id: string) => {
+
+    const visita =
+      visitas.find(
+        (v) => v.id === id
+      );
+
+    if (!visita) return;
+
+    if (!validarPin(visita)) {
+      await registrarPinIncorrecto(visita);
+      return;
+    }
+
+    // 📸 La evidencia también se conserva cuando el acceso es rechazado.
+    if (rol === "GUARDIA" && !visita.foto_evidencia) {
+      const rutaFoto =
+        await subirFotoEvidencia(visita);
+
+      if (!rutaFoto) {
+        return;
+      }
+    }
+
+    const confirmar = window.confirm(
+      "¿Confirmar que NO se permite el acceso?\n\nLos datos registrados no coinciden con la identificación del visitante o con la placa del vehículo.\n\nEl visitante deberá ponerse en contacto con el residente que autorizó la visita para actualizar la información y realizar una nueva autorización."
+    );
+
+    if (!confirmar) return;
+
+    const { error: updateError } =
+      await supabase
+        .from("visitas")
+        .update({
+          estado: "RECHAZADA",
+        })
+        .eq("id", id);
+
+    if (updateError) {
+      console.error(
+        "ERROR RECHAZANDO VISITA:",
+        updateError
+      );
+      alert("No se pudo registrar el rechazo del acceso.");
+      return;
+    }
+
+    const { error: auditoriaError } =
+      await supabase
+        .from("auditoria_visitas")
+        .insert({
+          visita_id: visita.id,
+          visitante_nombre: visita.visitante_nombre,
+          vivienda_codigo:
+            visita.viviendas?.codigo_vivienda || "",
+          pin_ingresado:
+            pinIngresado[visita.id] || "",
+          pin_correcto: true,
+          validado_por: usuario.id,
+          validado_por_nombre: usuario.nombre || "",
+          accion: "ACCESO RECHAZADO",
+          observacion:
+            "Datos de identificación o placa no coinciden. Se indica al visitante contactar al residente para realizar una nueva autorización.",
+        });
+
+    if (auditoriaError) {
+      console.error(
+        "ERROR AUDITORÍA RECHAZO:",
+        auditoriaError
+      );
+    }
+
+    alert(
+      "⛔ ACCESO NO PERMITIDO\n\nComunique al visitante que debe ponerse en contacto con el residente que autorizó la visita para actualizar la información en RENALIX.\n\nLa visita actual queda registrada como RECHAZADA. Para volver a ingresar deberá contar con una nueva autorización."
+    );
+
+    cargarVisitas();
+  };
 
   // 🔥 FINALIZAR
 
@@ -1246,6 +1470,10 @@ const visitaExpirada =
               Finalizada
             </option>
 
+            <option value="RECHAZADA">
+              Rechazada
+            </option>
+
           </select>
 
           <input
@@ -1472,6 +1700,44 @@ const visitaExpirada =
 
 </div>
 
+{/* 📸 EVIDENCIA FOTOGRÁFICA */}
+
+{v.foto_evidencia && fotoUrls[v.id] && (
+  <div
+    style={{
+      marginTop: 18,
+      padding: 12,
+      borderRadius: 16,
+      background: "#f9fafb",
+      border: "1px solid #e5e7eb",
+    }}
+  >
+    <div
+      style={{
+        fontWeight: "bold",
+        color: "#166534",
+        marginBottom: 10,
+        fontSize: 14,
+      }}
+    >
+      📸 Evidencia fotográfica de ingreso
+    </div>
+
+    <img
+      src={fotoUrls[v.id]}
+      alt={`Evidencia fotográfica de ${v.visitante_nombre || "visitante"}`}
+      style={{
+        width: "100%",
+        maxHeight: 360,
+        objectFit: "contain",
+        borderRadius: 12,
+        display: "block",
+        background: "#111827",
+      }}
+    />
+  </div>
+)}
+
 {/* 🔥 VALIDACIÓN PIN */}
 
 {(rol === "GUARDIA" ||
@@ -1508,6 +1774,109 @@ const visitaExpirada =
         fontSize: 14,
       }}
     />
+
+    {rol === "GUARDIA" &&
+     validarPin(v) &&
+     !visitaExpirada(v) &&
+     (intentosPin[v.id] || 0) < 3 && (
+
+      <div
+        style={{
+          marginTop: 8,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        <label
+          htmlFor={`foto-visita-${v.id}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            background: "#16a34a",
+            color: "#fff",
+            padding: "12px 16px",
+            borderRadius: 12,
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          📸 {fotoSeleccionada[v.id] ? "Tomar otra fotografía" : "Tomar fotografía"}
+        </label>
+
+        <input
+          id={`foto-visita-${v.id}`}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={(e: any) => {
+            const archivo = e.target.files?.[0];
+            if (!archivo) return;
+
+            if (!archivo.type.startsWith("image/")) {
+              alert("Seleccione una fotografía válida.");
+              return;
+            }
+
+            if (archivo.size > 5 * 1024 * 1024) {
+              alert("La fotografía no puede superar los 5 MB.");
+              return;
+            }
+
+            if (fotoPreview[v.id]) {
+              URL.revokeObjectURL(fotoPreview[v.id]);
+            }
+
+            const preview = URL.createObjectURL(archivo);
+
+            setFotoSeleccionada((prev) => ({
+              ...prev,
+              [v.id]: archivo,
+            }));
+
+            setFotoPreview((prev) => ({
+              ...prev,
+              [v.id]: preview,
+            }));
+          }}
+        />
+
+        {fotoPreview[v.id] && (
+          <div
+            style={{
+              borderRadius: 14,
+              overflow: "hidden",
+              border: "1px solid #d1d5db",
+              background: "#f9fafb",
+            }}
+          >
+            <img
+              src={fotoPreview[v.id]}
+              alt="Vista previa de evidencia"
+              style={{
+                width: "100%",
+                maxHeight: 260,
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+            <div
+              style={{
+                padding: "8px 10px",
+                fontSize: 12,
+                color: "#166534",
+                fontWeight: "bold",
+              }}
+            >
+              📷 Fotografía lista para registrar como evidencia
+            </div>
+          </div>
+        )}
+      </div>
+    )}
 
     {pinIngresado[v.id] && (
 
@@ -1560,6 +1929,39 @@ const visitaExpirada =
 
 )}
 
+                 {/* ⚠️ VERIFICACIÓN OBLIGATORIA PARA GUARDIA */}
+
+{rol === "GUARDIA" &&
+  v.estado === "PENDIENTE" &&
+  validarPin(v) &&
+  !visitaExpirada(v) &&
+  (intentosPin[v.id] || 0) < 3 &&
+  (fotoSeleccionada[v.id] || v.foto_evidencia) && (
+
+  <div
+    style={{
+      marginTop: 16,
+      padding: 14,
+      borderRadius: 14,
+      background: "#fff7ed",
+      border: "1px solid #fed7aa",
+      color: "#9a3412",
+      fontSize: 13,
+      lineHeight: 1.5,
+    }}
+  >
+    <div style={{ fontWeight: "bold", marginBottom: 6 }}>
+      ⚠️ VERIFICACIÓN OBLIGATORIA
+    </div>
+    <div>
+      Antes de aprobar el ingreso, verifique que la <b>identificación corresponda al visitante</b> y que la <b>placa registrada corresponda al vehículo</b>.
+    </div>
+    <div style={{ marginTop: 6, fontWeight: "bold" }}>
+      No apruebe el ingreso si alguno de los datos no coincide.
+    </div>
+  </div>
+)}
+
                  {/* 🔥 BOTONES */}
 
 {(rol === "ADMIN" ||
@@ -1591,6 +1993,14 @@ const visitaExpirada =
             ] || 0
           ) >= 3
 
+          ||
+
+          (rol === "GUARDIA" && !fotoSeleccionada[v.id] && !v.foto_evidencia)
+
+          ||
+
+          !!subiendoFoto[v.id]
+
         }
 
         onClick={() =>
@@ -1613,6 +2023,14 @@ const visitaExpirada =
                   v.id
                 ] || 0
               ) >= 3
+
+              ||
+
+              (rol === "GUARDIA" && !fotoSeleccionada[v.id] && !v.foto_evidencia)
+
+              ||
+
+              !!subiendoFoto[v.id]
             )
 
               ? "#9ca3af"
@@ -1642,6 +2060,14 @@ const visitaExpirada =
                   v.id
                 ] || 0
               ) >= 3
+
+              ||
+
+              (rol === "GUARDIA" && !fotoSeleccionada[v.id] && !v.foto_evidencia)
+
+              ||
+
+              !!subiendoFoto[v.id]
             )
 
               ? "not-allowed"
@@ -1663,6 +2089,14 @@ const visitaExpirada =
                   v.id
                 ] || 0
               ) >= 3
+
+              ||
+
+              (rol === "GUARDIA" && !fotoSeleccionada[v.id] && !v.foto_evidencia)
+
+              ||
+
+              !!subiendoFoto[v.id]
             )
 
               ? 0.7
@@ -1673,10 +2107,77 @@ const visitaExpirada =
 
       >
 
-        Aprobar ingreso
+        {subiendoFoto[v.id] ? "Guardando fotografía..." : "Aprobar ingreso"}
 
       </button>
 
+    )}
+
+    {rol === "GUARDIA" &&
+      v.estado === "PENDIENTE" && (
+      <button
+        disabled={
+          visitaExpirada(v) ||
+          (intentosPin[v.id] || 0) >= 3 ||
+          !validarPin(v) ||
+          (!fotoSeleccionada[v.id] && !v.foto_evidencia) ||
+          !!subiendoFoto[v.id]
+        }
+        onClick={() =>
+          rechazarAcceso(v.id)
+        }
+        style={{
+          background:
+            visitaExpirada(v) ||
+            (intentosPin[v.id] || 0) >= 3 ||
+            !validarPin(v) ||
+            (!fotoSeleccionada[v.id] && !v.foto_evidencia) ||
+            !!subiendoFoto[v.id]
+              ? "#9ca3af"
+              : "#dc2626",
+          color: "#fff",
+          border: "none",
+          padding: "10px 16px",
+          borderRadius: 12,
+          cursor:
+            visitaExpirada(v) ||
+            (intentosPin[v.id] || 0) >= 3 ||
+            !validarPin(v) ||
+            (!fotoSeleccionada[v.id] && !v.foto_evidencia) ||
+            !!subiendoFoto[v.id]
+              ? "not-allowed"
+              : "pointer",
+          fontWeight: "bold",
+          opacity:
+            visitaExpirada(v) ||
+            (intentosPin[v.id] || 0) >= 3 ||
+            !validarPin(v) ||
+            (!fotoSeleccionada[v.id] && !v.foto_evidencia) ||
+            !!subiendoFoto[v.id]
+              ? 0.7
+              : 1,
+        }}
+      >
+        ❌ No permitir acceso
+      </button>
+    )}
+
+    {v.estado ===
+      "RECHAZADA" && (
+      <div
+        style={{
+          marginTop: 4,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "#fef2f2",
+          border: "1px solid #fecaca",
+          color: "#991b1b",
+          fontSize: 13,
+          fontWeight: "bold",
+        }}
+      >
+        ⛔ Acceso rechazado. El residente debe crear una nueva visita para volver a autorizar el ingreso.
+      </div>
     )}
 
     {v.estado ===
@@ -1819,6 +2320,14 @@ function EstadoBadge({
       bg: "#dcfce7",
 
       color: "#166534",
+
+    },
+
+    RECHAZADA: {
+
+      bg: "#fee2e2",
+
+      color: "#991b1b",
 
     },
 

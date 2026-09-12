@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -59,26 +59,120 @@ const ESPECIALIDADES = [
   "Cerrajero",
   "Albañil",
   "Pintor",
-  "Jardinero",
   "Carpintero",
   "Soldador",
-  "Limpieza",
+  "Vidriero",
+  "Instalador de gypsum",
+  "Instalador de pisos",
+  "Instalador de cortinas",
+  "Tapicero",
+  "Jardinero",
+  "Limpieza residencial",
+  "Lavandería",
+  "Costurero / Modista",
+  "Lavado de alfombras",
+  "Lavado de colchones",
+  "Lavado de muebles y sofás",
+  "Limpieza de ventanas",
+  "Técnico de electrodomésticos",
+  "Técnico de refrigeración",
+  "Aire acondicionado",
+  "Mecánico automotriz",
+  "Mecánico de motos",
+  "Vulcanizador / Llantero",
+  "Lavado y detailing automotriz",
+  "Reparación de calzado",
+  "Reparación de celulares",
   "Técnico en computadoras",
   "Redes e internet",
   "Instalación de cámaras",
   "Seguridad electrónica",
   "Domótica",
-  "Aire acondicionado",
-  "Contador",
+  "Reparación de impresoras",
+  "Soporte tecnológico",
+  "Médico — Medicina General",
+  "Médico — Cardiología",
+  "Médico — Pediatría",
+  "Médico — Ginecología",
+  "Médico — Dermatología",
+  "Médico — Traumatología",
+  "Médico — Oftalmología",
+  "Médico — Otorrinolaringología",
+  "Médico — Neurología",
+  "Médico — Endocrinología",
+  "Médico — Gastroenterología",
+  "Médico — Urología",
+  "Médico — Psiquiatría",
+  "Médico — Medicina Interna",
+  "Médico — Geriatría",
+  "Médico — Neumología",
+  "Médico — Reumatología",
+  "Médico — Oncología",
+  "Médico — Nefrología",
+  "Médico — Cirugía General",
+  "Odontólogo",
+  "Enfermero",
+  "Fisioterapeuta",
+  "Nutricionista",
+  "Psicólogo",
+  "Masajista",
+  "Entrenador personal",
   "Abogado",
+  "Contador",
   "Arquitecto",
   "Ingeniero civil",
-  "Médico",
-  "Psicólogo",
-  "Mudanzas",
+  "Ingeniero eléctrico",
+  "Diseñador gráfico",
+  "Fotógrafo",
+  "Asesor financiero",
+  "Agente inmobiliario",
+  "Panadero",
+  "Pastelero",
+  "Repostero",
+  "Chef",
+  "Cocinero",
+  "Catering",
+  "Comida preparada",
+  "Peluquero",
+  "Barbero",
+  "Manicure / Pedicure",
+  "Maquillista",
+  "Estilista",
   "Transporte",
+  "Mudanzas",
+  "Delivery",
+  "Mensajería",
+  "Conductor particular",
+  "Tienda / Víveres",
+  "Minimarket",
+  "Ferretería",
+  "Floristería",
+  "Venta de productos para el hogar",
+  "Venta de alimentos",
+  "Servicios de impresión",
+  "Fotocopiado",
+  "Organización de eventos",
+  "Decoración de eventos",
+  "Repostería para eventos",
+  "Profesor particular",
+  "Tutor académico",
+  "Clases de idiomas",
+  "Veterinario",
+  "Peluquería canina",
+  "Paseo de mascotas",
+  "Cuidado de mascotas",
+  "Diseño y mantenimiento de jardines",
   "Fumigación",
-  "Control de plagas"
+  "Control de plagas",
+  "Guardia / Seguridad privada",
+  "Administración de propiedades",
+  "Avalúos inmobiliarios",
+  "Impermeabilización",
+  "Mantenimiento de piscinas",
+  "Limpieza de tanques de agua",
+  "Electricidad automotriz",
+  "Instalación de alarmas y accesorios vehiculares",
+  "Planchado de ropa"
 ];
 
 const [telefono,
@@ -432,7 +526,7 @@ if (!response.ok) {
     limpiar();
 
     alert(
-      "Técnico registrado"
+      "Profesional / servicio registrado"
     );
 
     cargar();
@@ -507,7 +601,7 @@ if (!response.ok) {
 
     const confirmar =
       confirm(
-        "¿Eliminar técnico?"
+        "¿Eliminar profesional o servicio?"
       );
 
     if (!confirmar)
@@ -607,7 +701,7 @@ if (!response.ok) {
                 "#111827",
             }}
           >
-            Gestión de Técnicos
+            Gestión de Servicios
           </h1>
 
           <p
@@ -617,7 +711,7 @@ if (!response.ok) {
                 "#6b7280",
             }}
           >
-            Administración y suscripción de técnicos profesionales
+            Administración y registro de profesionales, servicios y negocios de la comunidad.
           </p>
 
         </div>
@@ -667,7 +761,7 @@ if (!response.ok) {
               "#111827",
           }}
         >
-          Registrar Técnico
+          Registrar Profesional / Servicio
         </h2>
 
         <div
@@ -892,7 +986,7 @@ if (!response.ok) {
                 "0 8px 18px rgba(37,99,235,0.25)",
             }}
           >
-            + Registrar Técnico
+            + Registrar Profesional / Servicio
           </button>
 
         </div>
@@ -917,16 +1011,16 @@ if (!response.ok) {
       color: "#1d4ed8",
     }}
   >
-    📋 Activación de la cuenta del técnico
+    📋 Activación y acceso al Ecosistema de Servicios
   </h3>
 
   <p style={{ margin: 0 }}>
-    Una vez registrado el técnico, deberá completar el siguiente proceso:
+    Una vez registrado el profesional o servicio, deberá completar el siguiente proceso:
   </p>
 
   <br />
 
-  <b>🌐 Portal del Técnico</b>
+  <b>🌐 Portal del Profesional / Servicio</b>
 
   <br />
 
@@ -988,7 +1082,7 @@ if (!response.ok) {
             marginBottom: 18,
           }}
         >
-          Técnicos Pendientes de Activación
+          Profesionales Pendientes de Activación
         </h2>
 
         <div
@@ -1010,7 +1104,7 @@ if (!response.ok) {
                 borderRadius: 20,
               }}
             >
-              No existen técnicos pendientes
+              No existen profesionales pendientes
             </div>
 
           ) : (
@@ -1164,11 +1258,11 @@ if (!response.ok) {
               "#111827",
           }}
         >
-          Top Técnicos
+          Top Profesionales y Servicios
         </h2>
 
         <input
-          placeholder="Buscar técnico o especialidad"
+          placeholder="Buscar profesional, servicio o especialidad"
           value={busqueda}
           onChange={(e) =>
             setBusqueda(
@@ -1210,7 +1304,7 @@ if (!response.ok) {
               borderRadius: 20,
             }}
           >
-            No existen técnicos activos
+            No existen profesionales o servicios activos
           </div>
 
         ) : (

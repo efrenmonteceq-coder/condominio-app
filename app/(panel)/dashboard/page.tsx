@@ -81,6 +81,12 @@ const [limiteGastoAdmin,
   setLimiteGastoAdmin] =
   useState(0);
 
+  const [nombreCondominio, setNombreCondominio] =
+    useState("");
+
+  const [codigoVivienda, setCodigoVivienda] =
+    useState("");
+
   // 🔥 CARGAR DATOS
 
   const cargarDatos =
@@ -110,6 +116,39 @@ const [limiteGastoAdmin,
 
       setViviendas(
         viviendasData?.length || 0
+      );
+
+      // 🔥 NOMBRE DE LA URBANIZACIÓN
+      const {
+        data: condominioNombreData,
+      } = await supabase
+        .from("condominios")
+        .select("*")
+        .eq(
+          "id",
+          usuario.condominio_id
+        )
+        .single();
+
+      setNombreCondominio(
+        condominioNombreData?.nombre ||
+        "Tu urbanización"
+      );
+
+      // 🔥 VIVIENDA DEL RESIDENTE
+      // La relación correcta es: usuarios.id → viviendas.residente_id
+      const {
+        data: viviendaResidenteData,
+      } = await supabase
+        .from("viviendas")
+        .select("codigo_vivienda")
+        .eq("residente_id", usuario.id)
+        .eq("condominio_id", usuario.condominio_id)
+        .maybeSingle();
+
+      setCodigoVivienda(
+        viviendaResidenteData?.codigo_vivienda ||
+        "Vivienda no asignada"
       );
 
       // 🔥 RESIDENTES
@@ -571,25 +610,36 @@ if (rol === "RESIDENTE") {
 
       <div className="residente-mobile">
 
-        {/* CABECERA */}
+        {/* CABECERA PREMIUM */}
 
-        <div className="residente-mobile-header">
+        <div
+          className="residente-mobile-header"
+          style={{
+            background: "linear-gradient(135deg, #0f766e 0%, #0f766e 48%, #155e75 100%)",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <div className="residente-mobile-header-glow" />
+
           <div className="residente-mobile-saludo">
             <div className="residente-mobile-avatar">
-              👤
+              <span>👤</span>
             </div>
 
-            <div>
+            <div className="residente-mobile-header-info">
               <div className="residente-mobile-hola">
-                ¡Hola!
+                ¡Hola, {usuario.nombre || "Residente"}!
               </div>
 
-              <div className="residente-mobile-nombre">
-                {usuario.nombre || "Residente"}
+              <div className="residente-mobile-condominio">
+                <span className="residente-mobile-header-icon">🌐</span>
+                {nombreCondominio || "Tu urbanización"}
               </div>
 
               <div className="residente-mobile-vivienda">
-                🏠 Tu vivienda
+                <span className="residente-mobile-header-icon">🏠</span>
+                {codigoVivienda}
               </div>
             </div>
           </div>
@@ -601,125 +651,319 @@ if (rol === "RESIDENTE") {
 
           <button
             className="residente-mobile-card residente-card-verde"
+            style={{ background: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)", borderTop: "3px solid #10b981" }}
             onClick={() =>
               router.push("/estado-cuenta")
             }
           >
-            <div className="residente-mobile-icon">
-              💰
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="cuenta" />
             </div>
 
             <div className="residente-mobile-title">
-              Estado de cuenta
+              Estado de Cuenta
             </div>
 
             <div className="residente-mobile-subtitle">
-              Ver mi estado financiero
+              Consulta tu saldo, alícuotas y movimientos.
             </div>
 
-            <div className="residente-mobile-arrow">
-              →
-            </div>
+            <div className="residente-mobile-arrow">→</div>
           </button>
 
           <button
             className="residente-mobile-card residente-card-azul"
+            style={{ background: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)", borderTop: "3px solid #3b82f6" }}
             onClick={() =>
               router.push("/pagos")
             }
           >
-            <div className="residente-mobile-icon">
-              📄
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="pagos" />
             </div>
 
             <div className="residente-mobile-title">
-              Mis comprobantes
+              Mis Pagos y Comprobantes
             </div>
 
             <div className="residente-mobile-subtitle">
-              Ver mis comprobantes
+              Consulta tus pagos, registra comprobantes y revisa tu historial.
             </div>
 
-            <div className="residente-mobile-arrow">
-              →
-            </div>
+            <div className="residente-mobile-arrow">→</div>
           </button>
 
           <button
             className="residente-mobile-card residente-card-naranja"
+            style={{ background: "linear-gradient(145deg, #fff7ed 0%, #fed7aa 100%)", borderTop: "3px solid #f97316" }}
             onClick={() =>
-              router.push(
-                "/reservas?solo=historial"
-              )
+              router.push("/reservas")
             }
           >
-            <div className="residente-mobile-icon">
-              📅
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="areas" />
             </div>
 
             <div className="residente-mobile-title">
-              Mis reservas
+              Reserva Áreas Comunes
             </div>
 
             <div className="residente-mobile-subtitle">
-              Ver mis reservas
+              Reserva piscinas, canchas y otros espacios de la urbanización.
             </div>
 
-            <div className="residente-mobile-arrow">
-              →
-            </div>
+            <div className="residente-mobile-arrow">→</div>
           </button>
 
           <button
             className="residente-mobile-card residente-card-morado"
+            style={{ background: "linear-gradient(145deg, #f5f3ff 0%, #e9d5ff 100%)", borderTop: "3px solid #8b5cf6" }}
             onClick={() =>
-              router.push(
-                "/visitas?solo=historial"
-              )
+              router.push("/visitas")
             }
           >
-            <div className="residente-mobile-icon">
-              🚗
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="visitas" />
             </div>
 
             <div className="residente-mobile-title">
-              Mis visitas
+              Gestión de Visitas
             </div>
 
             <div className="residente-mobile-subtitle">
-              Ver mis visitas
+              Registra tus visitas y consulta el historial de ingresos.
             </div>
 
-            <div className="residente-mobile-arrow">
-              →
-            </div>
+            <div className="residente-mobile-arrow">→</div>
           </button>
 
           <button
             className="residente-mobile-card residente-card-rojo residente-card-novedades"
+            style={{ background: "linear-gradient(145deg, #fff1f2 0%, #fecdd3 100%)", borderTop: "3px solid #f43f5e" }}
             onClick={() =>
-              router.push(
-                "/novedades?solo=historial"
-              )
+              router.push("/novedades")
             }
           >
-            <div className="residente-mobile-icon">
-              📢
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="novedad" />
             </div>
 
             <div>
               <div className="residente-mobile-title">
-                Novedades
+                Reporta una Novedad
               </div>
 
               <div className="residente-mobile-subtitle">
-                Noticias de la urbanización
+                Informa novedades o situaciones que requieran atención.
               </div>
             </div>
 
-            <div className="residente-mobile-arrow">
-              →
+            <div className="residente-mobile-arrow">→</div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-azul"
+            style={{ background: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%)", borderTop: "3px solid #3b82f6" }}
+            onClick={() =>
+              router.push("/paqueteria")
+            }
+          >
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="paquetes" />
             </div>
+
+            <div className="residente-mobile-title">
+              Mis Paquetes
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Consulta y gestiona la recepción de tus paquetes.
+            </div>
+
+            <div className="residente-mobile-arrow">→</div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-morado"
+            style={{ background: "linear-gradient(145deg, #f5f3ff 0%, #e9d5ff 100%)", borderTop: "3px solid #8b5cf6" }}
+            onClick={() =>
+              router.push("/votaciones")
+            }
+          >
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="votacion" />
+            </div>
+
+            <div className="residente-mobile-title">
+              Participa y Vota
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Participa en las decisiones de tu urbanización.
+            </div>
+
+            <div className="residente-mobile-arrow">→</div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-verde"
+            style={{ background: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)", borderTop: "3px solid #10b981" }}
+            onClick={() =>
+              router.push("/gastos")
+            }
+          >
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="transparencia" />
+            </div>
+
+            <div className="residente-mobile-title">
+              Transparencia Financiera
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Consulta gastos y movimientos de tu urbanización.
+            </div>
+
+            <div className="residente-mobile-arrow">→</div>
+          </button>
+
+          <button
+            className="residente-mobile-card residente-card-naranja"
+            style={{ background: "linear-gradient(145deg, #fff7ed 0%, #fed7aa 100%)", borderTop: "3px solid #f97316" }}
+            onClick={() =>
+              router.push("/tecnicos")
+            }
+          >
+            <div
+              className="residente-mobile-icon residente-icon-svg"
+              style={{
+                width: 58,
+                height: 58,
+                minWidth: 58,
+                borderRadius: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.72)",
+                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
+              }}
+            >
+              <IconoMovil tipo="servicios" />
+            </div>
+
+            <div className="residente-mobile-title">
+              Ecosistema de Servicios
+            </div>
+
+            <div className="residente-mobile-subtitle">
+              Encuentra profesionales, servicios y negocios en tu comunidad.
+            </div>
+
+            <div className="residente-mobile-arrow">→</div>
           </button>
 
         </div>
@@ -727,39 +971,46 @@ if (rol === "RESIDENTE") {
         {/* RESUMEN */}
 
         <div className="residente-mobile-resumen">
-
           <div className="residente-mobile-resumen-title">
-            📊 Resumen de hoy
+            <span>📊</span>
+            Resumen de hoy
           </div>
 
           <div className="residente-mobile-resumen-grid">
 
             <div className="residente-mobile-mini">
-              <span>📅</span>
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="areas" />
+              </span>
               <strong>{reservasHoy}</strong>
               <small>Reservas hoy</small>
             </div>
 
             <div className="residente-mobile-mini">
-              <span>🚗</span>
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="visitas" />
+              </span>
               <strong>{visitasHoy}</strong>
               <small>Visitas hoy</small>
             </div>
 
             <div className="residente-mobile-mini">
-              <span>📢</span>
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="novedad" />
+              </span>
               <strong>{novedades}</strong>
               <small>Novedades</small>
             </div>
 
             <div className="residente-mobile-mini">
-              <span>💰</span>
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="cuenta" />
+              </span>
               <strong>{pagosPendientes}</strong>
               <small>Pagos pendientes</small>
             </div>
 
           </div>
-
         </div>
 
       </div>
@@ -1363,6 +1614,115 @@ if (rol === "DIRECTIVA") {
 
       );
       }
+
+// 🎨 ICONOS MODERNOS PARA EL DASHBOARD MÓVIL
+
+function IconoMovil({
+  tipo,
+}: {
+  tipo:
+    | "cuenta"
+    | "pagos"
+    | "areas"
+    | "visitas"
+    | "novedad"
+    | "paquetes"
+    | "votacion"
+    | "transparencia"
+    | "servicios";
+}) {
+  const paths: Record<string, React.ReactNode> = {
+    cuenta: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="M3 10h18" />
+        <path d="M7 15h3" />
+      </>
+    ),
+    pagos: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="M7 9h10" />
+        <path d="M7 13h6" />
+        <path d="M7 16h4" />
+      </>
+    ),
+    areas: (
+      <>
+        <path d="M4 16c2.5-4 5-6 8-6s5.5 2 8 6" />
+        <path d="M5 19h14" />
+        <path d="M8 13c0-3 2-6 4-8 2 2 4 5 4 8" />
+      </>
+    ),
+    visitas: (
+      <>
+        <path d="M5 17h14l-1-6H6l-1 6Z" />
+        <path d="M7 11 9 7h6l2 4" />
+        <circle cx="8" cy="17" r="1.5" />
+        <circle cx="16" cy="17" r="1.5" />
+      </>
+    ),
+    novedad: (
+      <>
+        <path d="M4 15h3l8 4V5l-8 4H4v6Z" />
+        <path d="M15 9c1.5.8 2.5 2.2 2.5 4s-1 3.2-2.5 4" />
+        <path d="M19 7c2 1.5 3 3.5 3 6s-1 4.5-3 6" />
+      </>
+    ),
+    paquetes: (
+      <>
+        <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+        <path d="M4 7.5 12 12l8-4.5" />
+        <path d="M12 12v9" />
+        <path d="M8 5.2 16 10" />
+      </>
+    ),
+    votacion: (
+      <>
+        <path d="M4 6h16v13H4z" />
+        <path d="m8 12 2.5 2.5L16 9" />
+        <path d="M8 3h8" />
+      </>
+    ),
+    transparencia: (
+      <>
+        <path d="M4 19V10" />
+        <path d="M10 19V6" />
+        <path d="M16 19v-9" />
+        <path d="M22 19V4" />
+        <path d="M3 19h20" />
+      </>
+    ),
+    servicios: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <circle cx="5" cy="6" r="2" />
+        <circle cx="19" cy="6" r="2" />
+        <circle cx="5" cy="18" r="2" />
+        <circle cx="19" cy="18" r="2" />
+        <path d="M7 7.5 10 10" />
+        <path d="m17 7.5-3 2.5" />
+        <path d="M7 16.5 10 14" />
+        <path d="m17 16.5-3-2.5" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ width: "1em", height: "1em" }}
+    >
+      {paths[tipo]}
+    </svg>
+  );
+}
 
 // 🔥 CARD PREMIUM
 

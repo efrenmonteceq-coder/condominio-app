@@ -55,6 +55,11 @@ const soloHistorial =
     setFiltroFecha] =
     useState("");
 
+  // 🔥 HISTORIAL: por defecto mostramos solo las 2 últimas
+  const [mostrarHistorialCompleto,
+    setMostrarHistorialCompleto] =
+    useState(false);
+
   // 🔥 FORM
 
   const [areaId,
@@ -1036,6 +1041,16 @@ setInvitados(0);
       filtroFecha,
     ]);
 
+    const hayFiltros =
+      busqueda.trim() ||
+      filtroEstado ||
+      filtroFecha;
+
+    const reservasVisibles =
+      hayFiltros || mostrarHistorialCompleto
+        ? reservasFiltradas
+        : reservasFiltradas.slice(0, 2);
+
     // 🔥 BLOQUES HORARIOS DISPONIBLES
 
 const bloquesDisponibles =
@@ -1863,11 +1878,10 @@ const bloquesDisponibles =
               value={
                 busqueda
               }
-              onChange={(e) =>
-                setBusqueda(
-                  e.target.value
-                )
-              }
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setMostrarHistorialCompleto(true);
+              }}
               style={
                 inputStyle
               }
@@ -1877,11 +1891,10 @@ const bloquesDisponibles =
               value={
                 filtroEstado
               }
-              onChange={(e) =>
-                setFiltroEstado(
-                  e.target.value
-                )
-              }
+              onChange={(e) => {
+                setFiltroEstado(e.target.value);
+                setMostrarHistorialCompleto(true);
+              }}
               style={
                 inputStyle
               }
@@ -1910,11 +1923,10 @@ const bloquesDisponibles =
               value={
                 filtroFecha
               }
-              onChange={(e) =>
-                setFiltroFecha(
-                  e.target.value
-                )
-              }
+              onChange={(e) => {
+                setFiltroFecha(e.target.value);
+                setMostrarHistorialCompleto(true);
+              }}
               style={
                 inputStyle
               }
@@ -1981,6 +1993,46 @@ const bloquesDisponibles =
 
           </div>
 
+          {!hayFiltros && (
+            <button
+              type="button"
+              onClick={() =>
+                setMostrarHistorialCompleto(
+                  (actual) => !actual
+                )
+              }
+              style={{
+                width: "100%",
+                marginBottom: 12,
+                padding: "12px 16px",
+                border: "1px solid #d1d5db",
+                borderRadius: 12,
+                background: "#ffffff",
+                color: "#111827",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {mostrarHistorialCompleto
+                ? "⬆️ Ver solo las 2 últimas"
+                : "📂 Ver historial completo"}
+            </button>
+          )}
+
+          {!hayFiltros && reservas.length > 0 && (
+            <div
+              style={{
+                marginBottom: 18,
+                fontSize: 13,
+                color: "#6b7280",
+              }}
+            >
+              {mostrarHistorialCompleto
+                ? `Mostrando el historial completo: ${reservas.length} registros`
+                : `Mostrando las ${Math.min(2, reservas.length)} últimas de ${reservas.length} registros`}
+            </div>
+          )}
+
           {reservasFiltradas.length ===
           0 ? (
 
@@ -1997,13 +2049,15 @@ const bloquesDisponibles =
               }}
             >
 
-              No existen reservas registradas
+              {hayFiltros
+                ? "No se encontraron reservas con los filtros seleccionados."
+                : "No existen reservas registradas"}
 
             </div>
 
           ) : (
 
-            reservasFiltradas.map(
+            reservasVisibles.map(
               (r) => {
 
                 const residente =

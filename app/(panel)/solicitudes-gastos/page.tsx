@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -30,6 +30,19 @@ export default function SolicitudesGastos() {
 
   const [cotizacion3, setCotizacion3] =
     useState<any>(null);
+
+  // 🔥 HISTORIAL
+  const [solicitudes, setSolicitudes] =
+    useState<any[]>([]);
+
+  const [cargandoSolicitudes, setCargandoSolicitudes] =
+    useState(false);
+
+  const [busqueda, setBusqueda] =
+    useState("");
+
+  const [mostrarHistorial, setMostrarHistorial] =
+    useState(false);
 
     const enviarSolicitud =
   async () => {
@@ -217,6 +230,77 @@ setCotizacion3(null);
 
   };
 
+  // 🔥 CARGAR HISTORIAL DE SOLICITUDES
+  const cargarSolicitudes = async () => {
+
+    if (!usuario?.condominio_id) return;
+
+    setCargandoSolicitudes(true);
+
+    const { data, error } =
+      await supabase
+        .from("solicitudes_gastos")
+        .select("*")
+        .eq(
+          "condominio_id",
+          usuario.condominio_id
+        )
+        .order(
+          "created_at",
+          {
+            ascending: false,
+          }
+        );
+
+    if (error) {
+      console.error(error);
+      setCargandoSolicitudes(false);
+      return;
+    }
+
+    setSolicitudes(data || []);
+    setCargandoSolicitudes(false);
+  };
+
+  // Cargar historial al entrar
+  useEffect(() => {
+    cargarSolicitudes();
+  }, [usuario?.condominio_id]);
+
+  const solicitudesFiltradas = (() => {
+
+    const termino =
+      busqueda.trim().toLowerCase();
+
+    const coincidencias =
+      solicitudes.filter((s) => {
+
+        const texto = [
+          s.categoria,
+          s.proveedor_sugerido,
+          s.descripcion,
+          s.observacion,
+          s.estado,
+          s.valor_solicitado,
+          s.created_at,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return texto.includes(termino);
+      });
+
+    if (
+      termino ||
+      mostrarHistorial
+    ) {
+      return coincidencias;
+    }
+
+    return coincidencias.slice(0, 2);
+  })();
+
   return (
 
     <div
@@ -401,6 +485,305 @@ setCotizacion3(null);
 >
   📤 Enviar Solicitud
 </button>
+
+      </div>
+
+      {/* 🔥 HISTORIAL DE SOLICITUDES */}
+
+      <div
+        style={{
+          background: "#fff",
+          padding: 24,
+          borderRadius: 16,
+          marginTop: 30,
+          boxShadow:
+            "0 2px 8px rgba(0,0,0,0.08)",
+        }}
+      >
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 15,
+            marginBottom: 20,
+          }}
+        >
+
+          <div>
+            <h2 style={{ margin: 0 }}>
+              📚 Historial de Solicitudes
+            </h2>
+
+            <p
+              style={{
+                color: "#6b7280",
+                marginBottom: 0,
+              }}
+            >
+              Se muestran inicialmente las 2 solicitudes más recientes.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setMostrarHistorial(
+                !mostrarHistorial
+              )
+            }
+            style={{
+              background: "#111827",
+              color: "#fff",
+              border: "none",
+              borderRadius: 12,
+              padding: "10px 16px",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            {mostrarHistorial
+              ? "⬆️ Ver solo las 2 últimas"
+              : "📂 Ver historial completo"}
+          </button>
+
+        </div>
+
+        <input
+          placeholder="🔎 Buscar categoría, proveedor, descripción, estado o fecha..."
+          value={busqueda}
+          onChange={(e) => {
+            const valor =
+              e.target.value;
+
+            setBusqueda(valor);
+
+            if (valor.trim()) {
+              setMostrarHistorial(true);
+            }
+          }}
+          style={inputStyle}
+        />
+
+        <div
+          style={{
+            marginTop: 12,
+            marginBottom: 18,
+            color: "#6b7280",
+            fontSize: 14,
+          }}
+        >
+          {busqueda.trim()
+            ? `Resultados encontrados: ${solicitudesFiltradas.length}`
+            : mostrarHistorial
+              ? `Historial completo: ${solicitudes.length} solicitudes`
+              : `Últimas solicitudes: ${Math.min(
+                  solicitudes.length,
+                  2
+                )}`}
+        </div>
+
+        {cargandoSolicitudes ? (
+
+          <div
+            style={{
+              padding: 30,
+              textAlign: "center",
+              color: "#6b7280",
+            }}
+          >
+            Cargando solicitudes...
+          </div>
+
+        ) : solicitudesFiltradas.length === 0 ? (
+
+          <div
+            style={{
+              padding: 30,
+              border: "2px dashed #d1d5db",
+              borderRadius: 14,
+              textAlign: "center",
+              color: "#6b7280",
+            }}
+          >
+            {busqueda.trim()
+              ? "No existen solicitudes que coincidan con la búsqueda."
+              : "No existen solicitudes registradas."}
+          </div>
+
+        ) : (
+
+          solicitudesFiltradas
+            .slice(0, 2)
+            .map((s) => (
+
+            <div
+              key={s.id}
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 16,
+                padding: 20,
+                marginBottom: 15,
+                background: "#fafafa",
+              }}
+            >
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+
+                <div>
+
+                  <h3
+                    style={{
+                      marginTop: 0,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {s.categoria || "Sin categoría"}
+                  </h3>
+
+                  <div
+                    style={{
+                      color: "#6b7280",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {s.descripcion || "Sin descripción"}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 14,
+                      color: "#6b7280",
+                    }}
+                  >
+                    Proveedor:{" "}
+                    <strong>
+                      {s.proveedor_sugerido || "-"}
+                    </strong>
+                  </div>
+
+                </div>
+
+                <div
+                  style={{
+                    background:
+                      s.estado === "APROBADO"
+                        ? "#16a34a"
+                        : s.estado === "RECHAZADO"
+                          ? "#dc2626"
+                          : "#f59e0b",
+                    color: "#fff",
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    fontWeight: "bold",
+                  }}
+                >
+                  {s.estado || "PENDIENTE"}
+                </div>
+
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit,minmax(180px,1fr))",
+                  gap: 12,
+                  marginTop: 18,
+                }}
+              >
+
+                <div>
+                  <small style={{ color: "#6b7280" }}>
+                    Valor solicitado
+                  </small>
+                  <div style={{ fontWeight: "bold" }}>
+                    ${Number(
+                      s.valor_solicitado || 0
+                    ).toFixed(2)}
+                  </div>
+                </div>
+
+                <div>
+                  <small style={{ color: "#6b7280" }}>
+                    Fecha
+                  </small>
+                  <div style={{ fontWeight: "bold" }}>
+                    {s.created_at
+                      ? new Date(
+                          s.created_at
+                        ).toLocaleDateString(
+                          "es-EC"
+                        )
+                      : "-"}
+                  </div>
+                </div>
+
+              </div>
+
+              {s.cotizacion_1_url && (
+                <div style={{ marginTop: 15 }}>
+                  <a
+                    href={s.cotizacion_1_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "#2563eb",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    📄 Ver cotización 1
+                  </a>
+                </div>
+              )}
+
+              {s.cotizacion_2_url && (
+                <div style={{ marginTop: 8 }}>
+                  <a
+                    href={s.cotizacion_2_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "#2563eb",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    📄 Ver cotización 2
+                  </a>
+                </div>
+              )}
+
+              {s.cotizacion_3_url && (
+                <div style={{ marginTop: 8 }}>
+                  <a
+                    href={s.cotizacion_3_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "#2563eb",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    📄 Ver cotización 3
+                  </a>
+                </div>
+              )}
+
+            </div>
+
+          ))
+
+        )}
 
       </div>
 

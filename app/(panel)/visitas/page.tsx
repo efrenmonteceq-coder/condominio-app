@@ -93,6 +93,10 @@ function VisitasContenido() {
     setBusqueda] =
     useState("");
 
+  const [mostrarHistorial,
+    setMostrarHistorial] =
+    useState(false);
+
   const [filtroEstado,
     setFiltroEstado] =
     useState("");
@@ -1038,7 +1042,21 @@ const visitaExpirada =
         (v) => {
 
           const texto =
-            `${v.visitante_nombre || ""} ${v.visitante_identificacion || ""} ${v.pin || ""}`
+            [
+              v.visitante_nombre,
+              v.visitante_identificacion,
+              v.placa_vehiculo,
+              v.pin,
+              v.fecha_visita,
+              v.hora_ingreso,
+              v.estado,
+              v.residentes?.nombre,
+              v.residentes?.apellido,
+              v.viviendas?.codigo_vivienda,
+              v.observacion,
+            ]
+              .filter(Boolean)
+              .join(" ")
               .toLowerCase();
 
           const coincideBusqueda =
@@ -1069,17 +1087,29 @@ const visitaExpirada =
 
     // 🔥 SI NO HAY VISITAS HOY
     // MOSTRAR TODO EL HISTORIAL
-
     if (
       resultado.length === 0 &&
       fechaQuery === "hoy"
     ) {
-
       return visitas;
-
     }
 
-    return resultado;
+    // Con búsqueda o filtros se consulta todo el conjunto.
+    const hayCriterios =
+      Boolean(busqueda.trim()) ||
+      Boolean(filtroEstado) ||
+      Boolean(filtroFecha);
+
+    if (
+      hayCriterios ||
+      mostrarHistorial ||
+      soloHistorial
+    ) {
+      return resultado;
+    }
+
+    // Vista inicial: solamente las 2 visitas más recientes.
+    return resultado.slice(0, 2);
 
   }, [
     visitas,
@@ -1087,6 +1117,8 @@ const visitaExpirada =
     filtroEstado,
     filtroFecha,
     fechaQuery,
+    mostrarHistorial,
+    soloHistorial,
   ]);
   
   // 🔒 VALIDACIONES
@@ -1431,16 +1463,22 @@ const visitaExpirada =
         >
 
           <input
-            placeholder="Buscar visita"
+            placeholder="🔎 Buscar visitante, identificación, placa, PIN o residente"
             value={busqueda}
-            onChange={(e) =>
-              setBusqueda(
-                e.target.value
-              )
-            }
+            onChange={(e) => {
+              const valor =
+                e.target.value;
+
+              setBusqueda(valor);
+
+              if (valor.trim()) {
+                setMostrarHistorial(true);
+              }
+            }}
             style={{
               ...inputStyle,
               minWidth: 260,
+              flex: 1,
             }}
           />
 
@@ -1489,6 +1527,64 @@ const visitaExpirada =
 
         </div>
 
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+            marginTop: 16,
+          }}
+        >
+
+          <div
+            style={{
+              color: "#6b7280",
+              fontSize: 14,
+            }}
+          >
+            {busqueda.trim() ||
+            filtroEstado ||
+            filtroFecha
+              ? `Resultados encontrados: ${visitasFiltradas.length}`
+              : mostrarHistorial || soloHistorial
+                ? `Historial completo: ${visitas.length} visitas`
+                : `Últimas visitas: ${Math.min(
+                    visitas.length,
+                    2
+                  )}`}
+          </div>
+
+          {!busqueda.trim() &&
+            !filtroEstado &&
+            !filtroFecha &&
+            !soloHistorial && (
+              <button
+                type="button"
+                onClick={() =>
+                  setMostrarHistorial(
+                    !mostrarHistorial
+                  )
+                }
+                style={{
+                  background: "#111827",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "10px 16px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {mostrarHistorial
+                  ? "⬆️ Ver solo las 2 últimas"
+                  : "📂 Ver historial completo"}
+              </button>
+            )}
+
+        </div>
+
       </div>
 
       {/* 🔥 LISTADO */}
@@ -1512,7 +1608,11 @@ const visitaExpirada =
               borderRadius: 20,
             }}
           >
-            No existen visitas registradas
+            {busqueda.trim() ||
+            filtroEstado ||
+            filtroFecha
+              ? "No existen visitas que coincidan con la búsqueda o los filtros."
+              : "No existen visitas registradas"}
           </div>
 
         ) : (
@@ -1650,10 +1750,6 @@ const visitaExpirada =
           new Date(
             v.fecha_salida
           );
-
-        fecha.setHours(
-          fecha.getHours() - 5
-        );
 
         return fecha.toLocaleString(
           "es-EC"

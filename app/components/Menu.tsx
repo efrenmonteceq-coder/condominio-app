@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 
 export default function Menu() {
 
@@ -15,6 +16,7 @@ export default function Menu() {
   const pathname =
     usePathname();
     const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+    const [condominioNombre, setCondominioNombre] = useState("");
     useEffect(() => {
   setMenuMovilAbierto(false);
 }, [pathname]);
@@ -25,6 +27,48 @@ export default function Menu() {
     (usuario?.rol || "")
       .toUpperCase()
       .trim();
+  useEffect(() => {
+    const cargarCondominioTecnico = async () => {
+      if (rol !== "TECNICO" || !usuario?.condominio_id) {
+        setCondominioNombre("");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("condominios")
+        .select("nombre")
+        .eq("id", usuario.condominio_id)
+        .single();
+
+      setCondominioNombre(data?.nombre || "");
+    };
+
+    cargarCondominioTecnico();
+  }, [rol, usuario?.condominio_id]);
+
+
+  // 🔧 ÍCONO TÉCNICO
+
+  const IconoTecnico = () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3.5 20c.6-3.1 2.5-5 5.5-5s4.9 1.9 5.5 5" />
+      <path d="m16.2 11.2 1.3 1.3" />
+      <path d="m18.1 9.3 2.6 2.6" />
+      <path d="m20.7 11.9-2.8 2.8" />
+      <path d="m17.9 14.7-1.3-1.3" />
+    </svg>
+  );
 
   // 🔥 MENU ITEM
 
@@ -382,6 +426,22 @@ transform: "translateX(0)",
   `🏛️ Directiva · ${
     usuario?.cargo_directiva || "Cargo no definido"
   }`}
+
+              {rol === "TECNICO" && "🔧 Técnico"}
+
+              {rol === "TECNICO" && condominioNombre && (
+                <div
+                  style={{
+                    marginTop: 3,
+                    color: "#64748b",
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  🏘️ {condominioNombre}
+                </div>
+              )}
+
             </div>
 
           </div>
@@ -415,6 +475,16 @@ transform: "translateX(0)",
       icon="📊"
       label="Dashboard"
     />
+
+    {(rol === "ADMIN" ||
+      rol === "GUARDIA" ||
+      rol === "RESIDENTE") && (
+      <MenuItem
+        href="/avisos"
+        icon="📢"
+        label="Avisos"
+      />
+    )}
 
     {rol !== "DIRECTIVA" && (
       <MenuItem
@@ -482,7 +552,7 @@ transform: "translateX(0)",
 
     <MenuItem
       href="/panel-tecnico"
-      icon="👨‍🔧"
+      icon={<IconoTecnico />}
       label="Panel Técnico"
     />
 
@@ -490,6 +560,12 @@ transform: "translateX(0)",
       href="/panel-tecnico"
       icon="🛠️"
       label="Mis Servicios"
+    />
+
+    <MenuItem
+      href="/panel-tecnico/pagos"
+      icon="💳"
+      label="Pagos y Comprobantes"
     />
 
   </>

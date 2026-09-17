@@ -57,6 +57,9 @@ const [duracionBloque,
   const [busqueda, setBusqueda] =
     useState("");
 
+  const [mostrarHistorial, setMostrarHistorial] =
+    useState(false);
+
   // 🔥 ROL
 
   const rol =
@@ -316,25 +319,35 @@ const [duracionBloque,
 
 };
 
-  // 🔍 FILTRO
+  // 🔍 FILTRO + HISTORIAL
+
+  const terminoBusqueda =
+    busqueda.trim().toLowerCase();
 
   const areasFiltradas =
-    busqueda
-      ? areas.filter(
-          (a) =>
-            a.nombre
-              ?.toLowerCase()
-              .includes(
-                busqueda.toLowerCase()
-              ) ||
+    terminoBusqueda
+      ? areas.filter((a) => {
+          const textoBusqueda = [
+            a.nombre,
+            a.descripcion,
+            a.estado,
+            a.capacidad,
+            a.horario_inicio,
+            a.horario_fin,
+            a.max_residentes,
+            a.max_invitados,
+            a.duracion_maxima_horas,
+            a.duracion_bloque_minutos,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-            a.descripcion
-              ?.toLowerCase()
-              .includes(
-                busqueda.toLowerCase()
-              )
-        )
-      : areas;
+          return textoBusqueda.includes(terminoBusqueda);
+        })
+      : mostrarHistorial
+        ? areas
+        : areas.slice(0, 2);
 
   // 🔒 VALIDACIONES
 
@@ -861,6 +874,52 @@ const [duracionBloque,
             fontSize: 15,
           }}
         />
+
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setMostrarHistorial(
+                !mostrarHistorial
+              )
+            }
+            style={{
+              background: mostrarHistorial
+                ? "#eef2ff"
+                : "#f3f4f6",
+              color: "#1f2937",
+              border: "1px solid #d1d5db",
+              padding: "10px 14px",
+              borderRadius: 12,
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 14,
+            }}
+          >
+            {mostrarHistorial
+              ? "⬆️ Ver solo las 2 últimas"
+              : "📂 Ver historial completo"}
+          </button>
+
+          <span
+            style={{
+              color: "#6b7280",
+              fontSize: 13,
+            }}
+          >
+            {terminoBusqueda
+              ? `${areasFiltradas.length} resultado${areasFiltradas.length === 1 ? "" : "s"}`
+              : `${areas.length} área${areas.length === 1 ? "" : "s"} registrada${areas.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
 
       </div>
 

@@ -49,6 +49,10 @@ export default function Pagos() {
     setBusqueda] =
     useState("");
 
+  const [mostrarHistorial,
+    setMostrarHistorial] =
+    useState(false);
+
   const rol =
     (usuario?.rol || "")
       .toUpperCase()
@@ -565,10 +569,13 @@ export default function Pagos() {
 
   };
 
-  // 🔥 FILTRO
+  // 🔥 FILTRO: ÚLTIMOS 2 + BÚSQUEDA + HISTORIAL
+
+  const terminoBusqueda =
+    busqueda.trim().toLowerCase();
 
   const pagosFiltrados =
-    busqueda
+    terminoBusqueda
       ? pagos.filter((p) => {
 
           const residente =
@@ -576,29 +583,28 @@ export default function Pagos() {
               p.residente_id
             );
 
-          return (
-            residente?.nombre
-              ?.toLowerCase()
-              .includes(
-                busqueda.toLowerCase()
-              ) ||
+          const textoBusqueda = [
+            residente?.nombre,
+            residente?.apellido,
+            p.estado,
+            p.periodo,
+            p.tipo_pago,
+            p.numero_comprobante,
+            p.metodo_pago,
+            p.referencia_pago,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-            p.estado
-              ?.toLowerCase()
-              .includes(
-                busqueda.toLowerCase()
-              ) ||
-
-            p.periodo
-              ?.toLowerCase()
-              .includes(
-                busqueda.toLowerCase()
-              )
-
+          return textoBusqueda.includes(
+            terminoBusqueda
           );
 
         })
-      : pagos;
+      : mostrarHistorial
+        ? pagos
+        : pagos.slice(0, 2);
 
   // 🔥 RESUMEN
 
@@ -886,13 +892,18 @@ export default function Pagos() {
         </h2>
 
         <input
-          placeholder="Buscar residente, estado o periodo"
+          placeholder="Buscar residente, estado, periodo o comprobante"
           value={busqueda}
-          onChange={(e) =>
-            setBusqueda(
-              e.target.value
-            )
-          }
+          onChange={(e) => {
+            const valor =
+              e.target.value;
+
+            setBusqueda(valor);
+
+            if (valor.trim()) {
+              setMostrarHistorial(true);
+            }
+          }}
           style={{
             ...inputStyle,
             width: "100%",
@@ -900,7 +911,54 @@ export default function Pagos() {
           }}
         />
 
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginTop: 16,
+          }}
+        >
+
+          <span
+            style={{
+              color: "#6b7280",
+              fontSize: 14,
+            }}
+          >
+            {terminoBusqueda
+              ? `Resultados encontrados: ${pagosFiltrados.length}`
+              : mostrarHistorial
+                ? `Historial completo: ${pagos.length} pagos`
+                : `Últimos pagos: ${Math.min(pagos.length, 2)}`}
+          </span>
+
+          {!terminoBusqueda && (
+            <button
+              type="button"
+              onClick={() =>
+                setMostrarHistorial(
+                  !mostrarHistorial
+                )
+              }
+              style={{
+                ...secondaryButton,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {mostrarHistorial
+                ? "⬆️ Ver solo los 2 últimos"
+                : "📂 Ver historial completo"}
+            </button>
+          )}
+
+        </div>
+
       </div>
+
 
       {/* 🔥 PAGOS */}
 
@@ -912,6 +970,23 @@ export default function Pagos() {
           gap: 22,
         }}
       >
+
+        {pagosFiltrados.length === 0 && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              background: "#fff",
+              borderRadius: 24,
+              padding: 30,
+              textAlign: "center",
+              color: "#6b7280",
+              boxShadow:
+                "0 8px 20px rgba(0,0,0,0.06)",
+            }}
+          >
+            🔎 No se encontraron pagos con ese criterio.
+          </div>
+        )}
 
         {pagosFiltrados.map(
           (p) => {

@@ -74,11 +74,19 @@ const [cargandoPaquetes, setCargandoPaquetes] =
   const [mostrarHistorial, setMostrarHistorial] =
   useState(false);
 
+  // Controla si dentro del historial se muestran todos los registros
+  // o solamente los 2 más recientes. No debe confundirse con la pestaña Historial.
+  const [mostrarTodoHistorial, setMostrarTodoHistorial] =
+  useState(false);
+
 const [historialPaquetes, setHistorialPaquetes] =
   useState<any[]>([]);
 
 const [cargandoHistorial, setCargandoHistorial] =
   useState(false);
+
+const [busquedaHistorial, setBusquedaHistorial] =
+  useState("");
 
   const [paqueteEntrega, setPaqueteEntrega] =
   useState<any | null>(null);
@@ -1126,6 +1134,40 @@ const registrarPaquete = async () => {
     setResultados([]);
   };
 
+  const terminoHistorial = busquedaHistorial.trim().toLowerCase();
+
+  const historialFiltrado = historialPaquetes.filter((paquete) => {
+    if (!terminoHistorial) return true;
+
+    const texto = [
+      paquete.residente?.nombre,
+      paquete.residente?.identificacion,
+      paquete.vivienda?.codigo_vivienda,
+      paquete.empresa_entrega,
+      paquete.descripcion,
+      paquete.estado,
+      paquete.entregado_a,
+      paquete.entregado_identificacion,
+      paquete.relacion_receptor,
+      paquete.observacion,
+      paquete.recibido_por?.nombre,
+      paquete.recibido_por?.apellido,
+      paquete.entregado_por_usuario?.nombre,
+      paquete.entregado_por_usuario?.apellido,
+      paquete.fecha_recepcion,
+      paquete.fecha_entrega,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return texto.includes(terminoHistorial);
+  });
+
+  const historialVisible = terminoHistorial || mostrarTodoHistorial
+    ? historialFiltrado
+    : historialFiltrado.slice(0, 2);
+
   // ==========================================
   // RENDER
   // ==========================================
@@ -1167,6 +1209,7 @@ const registrarPaquete = async () => {
             type="button"
             onClick={() => {
               setMostrarHistorial(false);
+              setMostrarTodoHistorial(false);
               cargarPaquetesPendientes();
             }}
             style={{
@@ -1187,6 +1230,7 @@ const registrarPaquete = async () => {
             type="button"
             onClick={() => {
               setMostrarHistorial(true);
+              setMostrarTodoHistorial(false);
               cargarHistorialPaquetes();
             }}
             style={{
@@ -1766,6 +1810,69 @@ const registrarPaquete = async () => {
                 🗂️ Historial de paquetes
               </div>
 
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 14,
+                  padding: 16,
+                  marginBottom: 16,
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 700,
+                    marginBottom: 8,
+                  }}
+                >
+                  🔎 Buscar en el historial
+                </label>
+
+                <input
+                  type="text"
+                  value={busquedaHistorial}
+                  onChange={(e) => setBusquedaHistorial(e.target.value)}
+                  placeholder="Residente, vivienda, empresa, descripción, estado..."
+                  autoComplete="off"
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #d1d5db",
+                    fontSize: 15,
+                    outline: "none",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarTodoHistorial((actual) => !actual)}
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 14px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 10,
+                    background: "#f9fafb",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  {mostrarTodoHistorial
+                    ? "⬆️ Ver solo los 2 últimos"
+                    : "📂 Ver historial completo"}
+                </button>
+
+                <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                  {terminoHistorial
+                    ? `Resultados encontrados: ${historialFiltrado.length}`
+                    : mostrarTodoHistorial
+                    ? `Historial completo: ${historialPaquetes.length} registros`
+                    : `Mostrando los 2 últimos de ${historialPaquetes.length} registros`}
+                </div>
+              </div>
+
               {cargandoHistorial && (
                 <div
                   style={{
@@ -1794,9 +1901,27 @@ const registrarPaquete = async () => {
                 </div>
               )}
 
-              {!cargandoHistorial && historialPaquetes.length > 0 && (
+              {!cargandoHistorial &&
+                historialPaquetes.length > 0 &&
+                terminoHistorial &&
+                historialVisible.length === 0 && (
+                  <div
+                    style={{
+                      padding: 20,
+                      textAlign: "center",
+                      background: "#f9fafb",
+                      borderRadius: 12,
+                      color: "#6b7280",
+                      border: "1px solid #e5e7eb",
+                    }}
+                  >
+                    🔎 No se encontraron resultados en el historial.
+                  </div>
+                )}
+
+              {!cargandoHistorial && historialVisible.length > 0 && (
                 <div style={{ display: "grid", gap: 14 }}>
-                  {historialPaquetes.map((paquete) => (
+                  {historialVisible.map((paquete) => (
                     <div
                       key={paquete.id}
                       style={{

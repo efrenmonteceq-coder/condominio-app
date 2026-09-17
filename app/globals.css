@@ -257,3 +257,40 @@ body {
     color: #64748b;
   }
 }
+
+/* =========================================
+   RENALIX - BOTÓN VOLVER EN MÓVIL
+   ========================================= */
+
+.renalix-mobile-back-button {
+  display: none;
+}
+
+@media (max-width: 680px) {
+  .renalix-mobile-back-button {
+    position: fixed !important;
+    top: 18px !important;
+    right: 12px !important;
+    left: auto !important;
+    z-index: 1000 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 9px 14px;
+    border: 1px solid #dbe3ea;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #172033;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 7px rgba(0, 0, 0, 0.06);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .renalix-mobile-back-button:active {
+    transform: scale(0.97);
+  }
+}

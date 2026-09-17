@@ -1,638 +1,258 @@
 "use client";
 
-import {
-useEffect,
-useState,
-} from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
-import {
-supabase,
-} from "@/lib/supabase";
-
-export default function PanelTecnico() {
-
-const [
-servicios,
-setServicios
-] = useState<any[]>([]);
-
-const [
-tecnico,
-setTecnico
-] = useState<any>(null);
-
-const [
-  archivo,
-  setArchivo
-] = useState<File | null>(null);
-
-const [
-  banco,
-  setBanco
-] = useState("");
-
-const [
-  numeroTransferencia,
-  setNumeroTransferencia
-] = useState("");
-
-const [
-  subiendo,
-  setSubiendo
-] = useState(false);
-
-
-const [
-  comprobantePendiente,
-  setComprobantePendiente
-] = useState(false);
-
-const [
-  configuracion,
-  setConfiguracion
-] = useState<any>(null);
-
-const cargar =
-async () => {
-
-
-  const usuario =
-    JSON.parse(
-      localStorage.getItem(
-        "usuario"
-      ) || "{}"
-    );
-
-  const identificacion =
-    usuario?.identificacion;
-
-  if (
-    !identificacion
-  ) {
-
-    return;
-
-  }
-
-  const {
-    data: tecnicoDB
-  } =
-    await supabase
-      .from(
-        "tecnicos"
-      )
-      .select("*")
-      .eq(
-        "cedula",
-        identificacion
-      )
-      .single();
-
-  console.log(
-    "TECNICO ENCONTRADO:",
-    tecnicoDB
-  );
-
-  if (!tecnicoDB) {
-
-    return;
-
-  }
-
-  setTecnico(
-    tecnicoDB
-  );
-
-  const {
-  data: config
-} = await supabase
-  .from(
-    "configuracion_saas"
-  )
-  .select("*")
-  .eq(
-    "activo",
-    true
-  )
-  .single();
-
-setConfiguracion(
-  config
-);
-
-  const {
-  data: pagosPendientes
-} =
-  await supabase
-    .from("pagos_tecnicos")
-    .select("*")
-    .eq(
-      "tecnico_id",
-      tecnicoDB.id
-    );
-
-console.log(
-  "PAGOS DEL TECNICO:",
-  pagosPendientes
-);
-
-setComprobantePendiente(
-  (pagosPendientes?.length || 0) > 0
-);
-
-  const {
-    data
-  } =
-    await supabase
-      .from(
-        "servicios_tecnicos"
-      )
-      .select("*")
-      .eq(
-        "tecnico_global_id",
-        tecnicoDB.id
-      );
-
-  console.log(
-    "SERVICIOS:",
-    data
-  );
-
-  setServicios(
-    data || []
-  );
-
+const card: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 4px 14px rgba(15,23,42,.06)",
 };
 
+const mobileCard: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 16,
+  boxShadow: "0 4px 14px rgba(15,23,42,.06)",
+  textDecoration: "none",
+  color: "#0f172a",
+};
 
-useEffect(() => {
+const mobileIconBox: React.CSSProperties = {
+  width: 46,
+  height: 46,
+  borderRadius: 14,
+  background: "#eef2ff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#2563eb",
+};
 
+function Icon({ tipo }: { tipo: "servicios" | "perfil" | "pago" }) {
+  const paths: Record<string, React.ReactNode> = {
+    servicios: <><path d="M14.7 6.3a4.1 4.1 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3l7.7-7.7a4.1 4.1 0 0 0-2-2z" /><path d="m7 17 2 2" /></>,
+    perfil: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.8-3.2 3.2-5 7-5s6.2 1.8 7 5" /></>,
+    pago: <><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M3.5 9h17M7 14h4" /></>,
+  };
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[tipo]}</svg>;
+}
 
-cargar();
+export default function PanelTecnico() {
+  const [tecnico, setTecnico] = useState<any>(null);
+  const [servicios, setServicios] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [comprobantePendiente, setComprobantePendiente] = useState(false);
+  const [condominioNombre, setCondominioNombre] = useState("");
 
-const interval =
-  setInterval(() => {
+  const cargar = async () => {
+    const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
+    const identificacion = usuario?.identificacion;
+    if (!identificacion) { setCargando(false); return; }
 
-    cargar();
+    if (usuario?.condominio_id) {
+      const { data: condominioDB } = await supabase
+        .from("condominios")
+        .select("nombre")
+        .eq("id", usuario.condominio_id)
+        .single();
 
-  }, 3000);
-
-return () =>
-  clearInterval(interval);
-
-
-}, []);
-
-const subirComprobante =
-  async () => {
-
-    if (
-      !archivo ||
-      !tecnico
-    ) {
-
-      alert(
-        "Seleccione un comprobante"
-      );
-
-      return;
-
+      setCondominioNombre(condominioDB?.nombre || "");
+    } else {
+      setCondominioNombre("");
     }
 
-    try {
+    const { data: tecnicoDB } = await supabase
+      .from("tecnicos")
+      .select("*")
+      .eq("cedula", identificacion)
+      .single();
 
-      setSubiendo(true);
+    if (!tecnicoDB) { setCargando(false); return; }
+    setTecnico(tecnicoDB);
 
-      const nombreArchivo =
-        `${tecnico.id}-${Date.now()}-${archivo.name}`;
+    const { data: pagos } = await supabase
+      .from("pagos_tecnicos")
+      .select("*")
+      .eq("tecnico_id", tecnicoDB.id);
+    setComprobantePendiente(
+      (pagos || []).some((p: any) => p.estado === "PENDIENTE")
+    );
 
-      const {
-        error: uploadError
-      } =
-        await supabase
-          .storage
-          .from("comprobantes-saas")
-          .upload(
-            nombreArchivo,
-            archivo
-          );
-
-      if (uploadError) {
-
-        throw uploadError;
-
-      }
-
-      const {
-        data
-      } =
-        supabase
-          .storage
-          .from("comprobantes-saas")
-          .getPublicUrl(
-            nombreArchivo
-          );
-
-      await supabase
-        .from(
-          "pagos_tecnicos"
-        )
-        .insert([{
-
-          tecnico_id:
-            tecnico.id,
-
-          valor: 14,
-
-          porcentaje_iva:
-            15,
-
-            banco,
-
-numero_transferencia:
-  numeroTransferencia,
-
-          comprobante_url:
-            data.publicUrl,
-
-          fecha_pago:
-            new Date(),
-
-          estado:
-            "PENDIENTE",
-
-        }]);
-
-      alert(
-        "Comprobante enviado correctamente"
-      );
-
-    } catch (error) {
-
-      console.error(error);
-
-      alert(
-        "Error al subir comprobante"
-      );
-
-    } finally {
-
-      setSubiendo(false);
-
-    }
-
+    const { data: serviciosDB } = await supabase
+      .from("servicios_tecnicos")
+      .select("*")
+      .eq("tecnico_global_id", tecnicoDB.id)
+      .order("created_at", { ascending: false })
+      .limit(2);
+    setServicios(serviciosDB || []);
+    setCargando(false);
   };
 
+  useEffect(() => {
+    cargar();
+    const interval = setInterval(cargar, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
-if (
-tecnico &&
-tecnico.estado !== "ACTIVO"
-) {
+  if (cargando) return <p style={{ padding: 30 }}>Cargando...</p>;
+  if (!tecnico) return <p style={{ padding: 30 }}>No autorizado</p>;
 
-
-return (
-
-  <div
-    style={{
-      padding: 40,
-      maxWidth: 700,
-      margin: "0 auto",
-    }}
-  >
-
-    <h1>
-      🔒 Cuenta pendiente de activación
-    </h1>
-
-    <p>
-      Bienvenido{" "}
-      <b>
-        {tecnico.nombre}
-      </b>
-    </p>
-
-    <p>
-      Para utilizar la plataforma
-      debe activar su suscripción.
-    </p>
-
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: 16,
-        padding: 20,
-        marginTop: 20,
-      }}
-    >
-
-      <h2>
-        Plan Anual Renalix
-      </h2>
-
-      <p>
-        USD 14.00
-      </p>
-
-      <p>
-        IVA incluido
-      </p>
-
-      {configuracion && (
-
-  <div
-    style={{
-      marginTop: 20,
-      padding: 15,
-      borderRadius: 10,
-      background: "#f8fafc",
-      border: "1px solid #dbeafe",
-    }}
-  >
-
-    <h3>
-      💳 Datos para realizar el pago
-    </h3>
-
-    <p>
-      <b>Empresa:</b>{" "}
-      {configuracion.empresa}
-    </p>
-
-    <p>
-      <b>Banco:</b>{" "}
-      {configuracion.banco}
-    </p>
-
-    <p>
-      <b>Tipo de cuenta:</b>{" "}
-      {configuracion.tipo_cuenta}
-    </p>
-
-    <p>
-      <b>Número de cuenta:</b>{" "}
-      {configuracion.numero_cuenta}
-    </p>
-
-    <p>
-      <b>Titular:</b>{" "}
-      {configuracion.titular_cuenta}
-    </p>
-
-    <p>
-      <b>Correo de cobros:</b>{" "}
-      {configuracion.correo_cobros}
-    </p>
-
-  </div>
-
-)}
-
-      <p>
-        Estado:
-        {" "}
-        <b>
-          {tecnico.estado}
-        </b>
-      </p>
-
-      {!comprobantePendiente ? (
-
-  <>
-
-  <input
-  placeholder="Banco desde donde realizó la transferencia"
-  value={banco}
-  onChange={(e) =>
-    setBanco(
-      e.target.value
-    )
+  if (tecnico.estado !== "ACTIVO") {
+    return (
+      <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "30px 20px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <div style={card}>
+            <h1 style={{ marginTop: 0 }}>🔒 Cuenta pendiente de activación</h1>
+            <p>Bienvenido <b>{tecnico.nombre}</b>.</p>
+            <p>Para utilizar la plataforma debe activar su suscripción.</p>
+            <Link href="/panel-tecnico/pagos" style={{ display: "inline-block", marginTop: 12, padding: "12px 18px", borderRadius: 10, background: "#2563eb", color: "white", textDecoration: "none", fontWeight: 700 }}>
+              <Icon tipo="pago" /> <span style={{ verticalAlign: "top", marginLeft: 8 }}>Ir a Pagos y Comprobantes</span>
+            </Link>
+            {comprobantePendiente && <div style={{ marginTop: 18, padding: 14, borderRadius: 10, background: "#f0fdf4" }}>✅ Comprobante enviado correctamente. Su pago está siendo revisado por RENALIX.</div>}
+          </div>
+        </div>
+      </main>
+    );
   }
-  style={{
-    padding: 12,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    width: "100%",
-    marginBottom: 10,
-  }}
-/>
 
-<input
-  placeholder="Número de transferencia"
-  value={numeroTransferencia}
-  onChange={(e) =>
-    setNumeroTransferencia(
-      e.target.value
-    )
-  }
-  style={{
-    padding: 12,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    width: "100%",
-    marginBottom: 15,
-  }}
-/>
+  const recientes = servicios.slice(0, 2);
 
-    <label
-  style={{
-    display: "inline-block",
-    padding: "12px 20px",
-    background: "#2563eb",
-    color: "white",
-    borderRadius: 10,
-    cursor: "pointer",
-    marginRight: 10,
-  }}
->
-  {
-  archivo
-    ? "✅ Comprobante cargado"
-    : "📂 Cargar comprobante"
-}
+      return (
+      <>
+        <div className="panel-tecnico-mobile">
+          <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "18px 16px 30px" }}>
+            <div style={{ maxWidth: 680, margin: "0 auto" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22, paddingTop: 6 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  background: "linear-gradient(135deg,#2563eb,#4f46e5)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", fontWeight: 800, fontSize: 18, flexShrink: 0,
+                }}>RX</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Ecosistema de Servicios</div>
+                  <div style={{ fontSize: 21, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Panel Técnico</div>
+                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
+                    Bienvenido, <b>{tecnico.nombre}</b>
+                  </div>
+                  {condominioNombre && (
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4, fontWeight: 600 }}>
+                      🏘️ {condominioNombre}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-  <input
-    type="file"
-    accept=".jpg,.jpeg,.png,.pdf"
-    style={{
-      display: "none",
-    }}
-    onChange={(e) =>
-      setArchivo(
-        e.target.files?.[0] || null
-      )
-    }
-  />
-</label>
+              <div style={{ marginBottom: 18 }}>
+                <h2 style={{ margin: "0 0 10px", fontSize: 18, color: "#0f172a" }}>Acciones principales</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>
+                  <Link href="/panel-tecnico/servicios" style={mobileCard}>
+                    <div style={mobileIconBox}><Icon tipo="servicios" /></div>
+                    <div style={{ marginTop: 10, fontWeight: 800 }}>Mis Servicios</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Consulta y gestiona tus servicios</div>
+                  </Link>
+                  <Link href="/panel-tecnico/perfil" style={mobileCard}>
+                    <div style={mobileIconBox}><Icon tipo="perfil" /></div>
+                    <div style={{ marginTop: 10, fontWeight: 800 }}>Mi Perfil</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Datos del profesional</div>
+                  </Link>
+                  <Link href="/panel-tecnico/pagos" style={mobileCard}>
+                    <div style={mobileIconBox}><Icon tipo="pago" /></div>
+                    <div style={{ marginTop: 10, fontWeight: 800 }}>Pagos y Comprobantes</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Estado de tu suscripción</div>
+                  </Link>
+                </div>
+              </div>
 
-    <button
-      onClick={
-        subirComprobante
-      }
-      disabled={
-        subiendo
-      }
-      
-      style={{
-  marginTop: 15,
-  padding: "12px 20px",
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-}}
+              <div style={{ ...mobileCard, marginBottom: 14 }}>
+                <h2 style={{ margin: 0, fontSize: 18 }}>Estado de tu cuenta</h2>
+                <div style={{
+                  display: "inline-block", marginTop: 10, padding: "6px 10px",
+                  borderRadius: 999, background: "#dcfce7", color: "#166534",
+                  fontSize: 12, fontWeight: 800,
+                }}>{tecnico.estado || "ACTIVO"}</div>
+                <p style={{ color: "#64748b", fontSize: 13, margin: "9px 0 0" }}>
+                  Tu cuenta de técnico está activa y puedes gestionar tus servicios.
+                </p>
+              </div>
 
-    >
-      {
-        subiendo
-          ? "Subiendo..."
-          : "Enviar comprobante"
-      }
-    </button>
+              <div style={mobileCard}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: 18 }}>Servicios recientes</h2>
+                    <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 12 }}>Tus dos servicios más recientes.</p>
+                  </div>
+                  <Link href="/panel-tecnico/servicios" style={{
+                    textDecoration: "none", fontWeight: 800, color: "#2563eb", fontSize: 13
+                  }}>Ver todos →</Link>
+                </div>
 
-  </>
-
-) : (
-
-  <div
-    style={{
-      marginTop: 20,
-      padding: 15,
-      borderRadius: 10,
-      background: "#f0fdf4",
-    }}
-  >
-
-    ✅ Comprobante enviado correctamente.
-
-    <br />
-
-    Su pago está siendo revisado
-    por Renalix.
-
-  </div>
-
-)}
-
-      
-
-    </div>
-
-  </div>
-
-);
-
-
-}
-
-return (
-
-
-<div
-  style={{
-    padding: 30,
-  }}
->
-
-  <h1>
-    👨‍🔧 Panel Técnico
-  </h1>
-
-  <p>
-    Servicios asignados:
-  </p>
-
-  <div
-    style={{
-      display: "flex",
-      flexDirection:
-        "column",
-      gap: 16,
-      marginTop: 20,
-    }}
-  >
-
-    {servicios.map(
-      (s) => (
-
-        <div
-          key={s.id}
-          style={{
-
-            border:
-              "1px solid #ddd",
-
-            borderRadius: 16,
-
-            padding: 18,
-
-          }}
-        >
-
-          <div>
-            🛠️{" "}
-            {s.descripcion}
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-            }}
-          >
-
-            👤 Residente:{" "}
-            <b>
-              {s.residente_nombre}
-            </b>
-
-          </div>
-
-          <div>
-
-            📞 Teléfono:{" "}
-            {s.residente_telefono}
-
-          </div>
-
-          <div>
-
-            🏠 Vivienda:{" "}
-            {s.residente_vivienda}
-
-          </div>
-
-          <div>
-
-            🏢 Condominio:{" "}
-            {s.condominio_nombre}
-
-          </div>
-
-          <div>
-            Estado:{" "}
-            <b>
-              {s.estado}
-            </b>
-          </div>
-
-          <div>
-            Fecha:{" "}
-            {new Date(
-              s.created_at
-            ).toLocaleString()}
-          </div>
-
+                {recientes.length === 0 ? (
+                  <div style={{ padding: "24px 8px 8px", textAlign: "center", color: "#64748b", fontSize: 13 }}>
+                    Todavía no tienes servicios asignados.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                    {recientes.map(s => (
+                      <div key={s.id} style={{ border: "1px solid #eef2f7", borderRadius: 14, padding: 13 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14 }}>{s.descripcion || "Servicio solicitado"}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>Residente: {s.residente_nombre || "-"}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Vivienda: {s.residente_vivienda || "-"}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Estado: <b>{s.estado || "SIN ESTADO"}</b></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </main>
         </div>
 
-      )
-    )}
+        <div className="panel-tecnico-desktop">
+          <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "30px 20px" }}>
+            <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 14, color: "#64748b", marginBottom: 4 }}>Ecosistema de Servicios</div>
+                <h1 style={{ margin: 0, fontSize: 30, color: "#0f172a" }}>👨‍🔧 Panel Técnico</h1>
+                <p style={{ margin: "7px 0 0", color: "#64748b" }}>Bienvenido, <b>{tecnico.nombre}</b>. Este es tu resumen.</p>
+              </div>
 
-  </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 24 }}>
+                <Link href="/panel-tecnico/perfil" style={{ textDecoration: "none", color: "inherit" }}><div style={card}><Icon tipo="perfil" /><div style={{ marginTop: 10, fontWeight: 700 }}>Mi Perfil</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Datos del profesional</div></div></Link>
+                <Link href="/panel-tecnico/servicios" style={{ textDecoration: "none", color: "inherit" }}><div style={card}><Icon tipo="servicios" /><div style={{ marginTop: 10, fontWeight: 700 }}>Mis Servicios</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>{servicios.length} servicio(s) registrado(s)</div></div></Link>
+                <Link href="/panel-tecnico/pagos" style={{ textDecoration: "none", color: "inherit" }}><div style={card}><Icon tipo="pago" /><div style={{ marginTop: 10, fontWeight: 700 }}>Pagos y Comprobantes</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>Estado de tu suscripción</div></div></Link>
+              </div>
 
-</div>
+              <div style={{ ...card, marginBottom: 18 }}>
+                <h2 style={{ marginTop: 0, color: "#0f172a" }}>Estado de tu cuenta</h2>
+                <div style={{ display: "inline-block", padding: "6px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontSize: 12, fontWeight: 700 }}>{tecnico.estado || "ACTIVO"}</div>
+                <p style={{ color: "#64748b", marginBottom: 0 }}>Tu cuenta de técnico está activa y puedes gestionar tus servicios.</p>
+              </div>
 
+              <div style={card}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div><h2 style={{ margin: 0, color: "#0f172a" }}>Servicios recientes</h2><p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>Tus dos servicios más recientes.</p></div>
+                  <Link href="/panel-tecnico/servicios" style={{ textDecoration: "none", fontWeight: 700, color: "#2563eb" }}>Buscar servicios →</Link>
+                </div>
+                {recientes.length === 0 ? <div style={{ padding: 28, textAlign: "center", color: "#64748b" }}>Todavía no tienes servicios asignados.</div> : <div style={{ display: "grid", gap: 12, marginTop: 16 }}>{recientes.map(s => <div key={s.id} style={{ border: "1px solid #eef2f7", borderRadius: 14, padding: 15 }}><div style={{ fontWeight: 700 }}>{s.descripcion || "Servicio solicitado"}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 7 }}>Residente: {s.residente_nombre || "-"} · Vivienda: {s.residente_vivienda || "-"}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Estado: <b>{s.estado || "SIN ESTADO"}</b></div></div>)}</div>}
+              </div>
+            </div>
+          </main>
+        </div>
 
-);
-
+        <style jsx>{`
+          .panel-tecnico-mobile { display: none; }
+          .panel-tecnico-desktop { display: block; }
+          @media (max-width: 680px) {
+            .panel-tecnico-mobile { display: block; }
+            .panel-tecnico-desktop { display: none; }
+          }
+        `}</style>
+      </>
+    );
 }

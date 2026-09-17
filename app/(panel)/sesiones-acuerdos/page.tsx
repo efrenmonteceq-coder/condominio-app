@@ -31,6 +31,8 @@ export default function SesionesAcuerdos() {
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
 
   const rol = (usuario?.rol || "").toUpperCase().trim();
 
@@ -344,29 +346,56 @@ export default function SesionesAcuerdos() {
         </div>
       )}
 
-      {/* LISTADO */}
+      {/* BÚSQUEDA E HISTORIAL */}
 
       {!cargando && sesiones.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit,minmax(320px,1fr))",
-            gap: 20,
-          }}
-        >
-          {sesiones.map((sesion) => (
-            <SesionCard
-              key={sesion.id}
-              sesion={sesion}
-              onClick={() =>
-                router.push(
-                  `/sesiones-acuerdos/${sesion.id}`
-                )
-              }
-            />
-          ))}
-        </div>
+        <>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 18, marginBottom: 20, boxShadow: "0 4px 14px rgba(0,0,0,0.07)" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={(e) => {
+                    setBusqueda(e.target.value);
+                    if (e.target.value.trim()) setMostrarHistorial(true);
+                  }}
+                  placeholder="🔎 Buscar por título, descripción, lugar o estado..."
+                  style={{ width: "100%", boxSizing: "border-box", padding: "13px 15px", border: "1px solid #d1d5db", borderRadius: 12, fontSize: 14, outline: "none" }}
+                />
+              </div>
+              <button onClick={() => setMostrarHistorial((actual) => !actual)} style={{ border: "none", borderRadius: 12, padding: "13px 18px", background: "#eff6ff", color: "#1d4ed8", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap" }}>
+                {mostrarHistorial ? "⬆️ Ver solo las 2 últimas" : "📂 Ver historial completo"}
+              </button>
+            </div>
+            {busqueda.trim() && <div style={{ marginTop: 10, fontSize: 13, color: "#6b7280" }}>Buscando en todas las sesiones registradas.</div>}
+          </div>
+
+          {(() => {
+            const termino = busqueda.trim().toLowerCase();
+            const sesionesFiltradas = termino
+              ? sesiones.filter((sesion) => [sesion.titulo, sesion.descripcion, sesion.lugar, sesion.estado, sesion.fecha].filter(Boolean).some((valor) => String(valor).toLowerCase().includes(termino)))
+              : mostrarHistorial ? sesiones : sesiones.slice(0, 2);
+
+            return (
+              <>
+                <div style={{ marginBottom: 14, color: "#374151", fontSize: 14, fontWeight: "bold" }}>
+                  {termino ? `Resultados encontrados: ${sesionesFiltradas.length}` : mostrarHistorial ? `Historial completo: ${sesiones.length} sesiones` : `Últimas sesiones: ${Math.min(2, sesiones.length)}`}
+                </div>
+
+                {sesionesFiltradas.length === 0 ? (
+                  <div style={{ background: "#fff", borderRadius: 18, padding: 30, textAlign: "center", color: "#6b7280", boxShadow: "0 4px 14px rgba(0,0,0,0.07)" }}>🔎 No se encontraron sesiones con ese criterio.</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 20 }}>
+                    {sesionesFiltradas.map((sesion) => (
+                      <SesionCard key={sesion.id} sesion={sesion} onClick={() => router.push(`/sesiones-acuerdos/${sesion.id}`)} />
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </>
       )}
     </div>
   );

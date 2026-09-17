@@ -1488,7 +1488,7 @@ console.log("DEBUG ASISTENCIA FINAL:", {
   total_habilitados: habilitados.length,
   asistentes_habilitados: asistentesHabilitados.length,
   porcentaje: porcentajeAsistencia,
-  registros: [],
+  registros: asistentesInforme,
 },
         votaciones: votaciones.map((votacion) => {
           const conteo = conteoVotos[votacion.id] || {
@@ -1541,11 +1541,18 @@ console.log("DEBUG ASISTENCIA FINAL:", {
         );
       }
 
-      const informe = String(resultado?.informe || "").trim();
+      const informeOriginal = String(resultado?.informe || "").trim();
 
-      if (!informe) {
-        throw new Error("La IA no devolvió contenido para el informe.");
-      }
+if (!informeOriginal) {
+  throw new Error("La IA no devolvió contenido para el informe.");
+}
+
+const informe = informeOriginal
+  .replace(
+    /(?:^|\n)\s*(?:#{1,3}\s*)?9\.\s*Firmas y validación[\s\S]*$/i,
+    ""
+  )
+  .trim();
 
       setInformeGenerado(informe);
       setInformePreparado(true);

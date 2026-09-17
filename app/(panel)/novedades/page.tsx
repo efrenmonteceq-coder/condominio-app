@@ -70,6 +70,8 @@ const soloHistorial =
     setFiltroFecha] =
     useState("");
 
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+
   // 🔥 ROL
 
   const rol =
@@ -509,56 +511,21 @@ cargarNovedades();
                };
 
   // 🔥 FILTRAR NOVEDADES
+  // Búsqueda/filtros recorren todo el historial; vista normal muestra las 2 últimas.
+  const novedadesFiltradas = useMemo(() => {
+    const resultados = novedades.filter((n) => {
+      const texto = `${n.descripcion || ""} ${n.registrado_por || ""} ${n.tipo || ""} ${n.residente_nombre || ""} ${n.codigo_vivienda || ""}`.toLowerCase();
+      const termino = busqueda.trim().toLowerCase();
+      const coincideBusqueda = !termino || texto.includes(termino);
+      const coincideEstado = filtroEstado ? n.estado === filtroEstado : true;
+      const fechaNovedad = n.fecha ? new Date(n.fecha).toISOString().split("T")[0] : "";
+      const coincideFecha = filtroFecha ? fechaNovedad === filtroFecha : true;
+      return coincideBusqueda && coincideEstado && coincideFecha;
+    });
 
-  const novedadesFiltradas =
-    useMemo(() => {
-
-      return novedades.filter((n) => {
-
-        const texto =
-          `${n.descripcion || ""} ${n.registrado_por || ""} ${n.tipo || ""}`
-            .toLowerCase();
-
-        const coincideBusqueda =
-          texto.includes(
-            busqueda.toLowerCase()
-          );
-
-        const coincideEstado =
-          filtroEstado
-            ? n.estado ===
-              filtroEstado
-            : true;
-
-        const fechaNovedad =
-          n.fecha
-            ? new Date(
-                n.fecha
-              )
-                .toISOString()
-                .split("T")[0]
-            : "";
-
-        const coincideFecha =
-          filtroFecha
-            ? fechaNovedad ===
-              filtroFecha
-            : true;
-
-        return (
-          coincideBusqueda &&
-          coincideEstado &&
-          coincideFecha
-        );
-
-      });
-
-    }, [
-      novedades,
-      busqueda,
-      filtroEstado,
-      filtroFecha,
-    ]);
+    const hayCriterios = !!(busqueda.trim() || filtroEstado || filtroFecha || soloHistorial || mostrarHistorial);
+    return hayCriterios ? resultados : resultados.slice(0, 2);
+  }, [novedades, busqueda, filtroEstado, filtroFecha, soloHistorial, mostrarHistorial]);
 
   // 🔒 VALIDACIÓN
 
@@ -1017,11 +984,10 @@ cargarNovedades();
               type="text"
               placeholder="Buscar descripción, usuario o tipo..."
               value={busqueda}
-              onChange={(e) =>
-                setBusqueda(
-                  e.target.value
-                )
-              }
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                if (e.target.value.trim()) setMostrarHistorial(true);
+              }}
               style={{
                 width: "100%",
                 padding: 14,
@@ -1133,23 +1099,13 @@ cargarNovedades();
               Listado de novedades
             </h2>
 
-            <div
-              style={{
-                background:
-                  "#111827",
-                color: "#fff",
-                padding:
-                  "10px 18px",
-                borderRadius: 14,
-                fontWeight:
-                  "bold",
-              }}
-            >
-              Resultados:
-              {" "}
-              {
-                novedadesFiltradas.length
-              }
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ background: "#111827", color: "#fff", padding: "10px 18px", borderRadius: 14, fontWeight: "bold" }}>
+                Resultados: {novedadesFiltradas.length}
+              </div>
+              <button type="button" onClick={() => setMostrarHistorial((actual) => !actual)} style={{ border: "1px solid #d1d5db", background: "#fff", color: "#111827", padding: "10px 16px", borderRadius: 14, cursor: "pointer", fontWeight: "bold", fontSize: 14 }}>
+                {mostrarHistorial ? "⬆️ Ver solo las 2 últimas" : "📂 Ver historial completo"}
+              </button>
             </div>
 
           </div>

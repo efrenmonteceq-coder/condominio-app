@@ -57,6 +57,10 @@ console.log(
     setBusqueda] =
     useState("");
 
+  const [mostrarHistorial,
+    setMostrarHistorial] =
+    useState(false);
+
   const [filtroCategoria,
     setFiltroCategoria] =
     useState("");
@@ -578,52 +582,58 @@ estado_aprobacion:
   const gastosFiltrados =
     useMemo(() => {
 
-      return gastos.filter(
-        (g) => {
+      const terminoBusqueda =
+        busqueda.trim().toLowerCase();
 
-          const texto =
-            `${g.proveedor || ""} ${g.descripcion || ""}`
-              .toLowerCase();
+      const gastosCoincidentes =
+        gastos.filter((g) => {
+          const textoBusqueda = [
+            g.proveedor,
+            g.ruc_proveedor,
+            g.numero_factura,
+            g.descripcion,
+            g.categoria,
+            g.forma_pago,
+            g.tipo_comprobante,
+            g.autorizacion_sri,
+            g.fecha_gasto,
+            g.fecha_emision,
+            g.estado_aprobacion,
+            g.observacion,
+          ].filter(Boolean).join(" " ).toLowerCase();
 
           const coincideBusqueda =
-            texto.includes(
-              busqueda.toLowerCase()
-            );
+            !terminoBusqueda ||
+            textoBusqueda.includes(terminoBusqueda);
 
           const coincideCategoria =
-            filtroCategoria
-              ? g.categoria ===
-                filtroCategoria
-              : true;
-
+            filtroCategoria ? g.categoria === filtroCategoria : true;
           const coincideFecha =
-            filtroFecha
-              ? g.fecha_gasto ===
-                filtroFecha
-              : true;
-
+            filtroFecha ? g.fecha_gasto === filtroFecha : true;
           const coincideFormaPago =
-            filtroFormaPago
-              ? g.forma_pago ===
-                filtroFormaPago
-              : true;
+            filtroFormaPago ? g.forma_pago === filtroFormaPago : true;
 
-          return (
-            coincideBusqueda &&
-            coincideCategoria &&
-            coincideFecha &&
-            coincideFormaPago
-          );
+          return coincideBusqueda && coincideCategoria && coincideFecha && coincideFormaPago;
+        });
 
-        }
-      );
+      const hayCriterios =
+        Boolean(terminoBusqueda) ||
+        Boolean(filtroCategoria) ||
+        Boolean(filtroFecha) ||
+        Boolean(filtroFormaPago);
 
+      if (hayCriterios || mostrarHistorial) {
+        return gastosCoincidentes;
+      }
+
+      return gastosCoincidentes.slice(0, 2);
     }, [
       gastos,
       busqueda,
       filtroCategoria,
       filtroFecha,
       filtroFormaPago,
+      mostrarHistorial,
     ]);
 
   // 🔥 KPIs
@@ -1490,18 +1500,14 @@ estado_aprobacion:
           >
 
             <input
-              placeholder="Buscar proveedor..."
-              value={
-                busqueda
-              }
-              onChange={(e) =>
-                setBusqueda(
-                  e.target.value
-                )
-              }
-              style={
-                inputStyle
-              }
+              placeholder="Buscar proveedor, descripción, factura o categoría..."
+              value={busqueda}
+              onChange={(e) => {
+                const valor = e.target.value;
+                setBusqueda(valor);
+                if (valor.trim()) setMostrarHistorial(true);
+              }}
+              style={inputStyle}
             />
 
             <select
@@ -1585,6 +1591,43 @@ estado_aprobacion:
 
           </div>
 
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
+              marginTop: 18,
+            }}
+          >
+            <div style={{ color: "#6b7280", fontSize: 14 }}>
+              {busqueda.trim() || filtroCategoria || filtroFecha || filtroFormaPago
+                ? `Resultados encontrados: ${gastosFiltrados.length}`
+                : mostrarHistorial
+                  ? `Historial completo: ${gastos.length} gastos`
+                  : `Últimos gastos: ${Math.min(gastos.length, 2)}`}
+            </div>
+
+            {!busqueda.trim() && !filtroCategoria && !filtroFecha && !filtroFormaPago && gastos.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setMostrarHistorial(!mostrarHistorial)}
+                style={{
+                  background: "#111827",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "10px 16px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {mostrarHistorial ? "⬆️ Ver solo los 2 últimos" : "📂 Ver historial completo"}
+              </button>
+            )}
+          </div>
+
         </div>
 
         {/* 🔥 LISTADO */}
@@ -1660,7 +1703,9 @@ estado_aprobacion:
               }}
             >
 
-              No existen gastos registrados
+              {busqueda.trim() || filtroCategoria || filtroFecha || filtroFormaPago
+                ? "No existen gastos que coincidan con la búsqueda o los filtros."
+                : "No existen gastos registrados"}
 
             </div>
 

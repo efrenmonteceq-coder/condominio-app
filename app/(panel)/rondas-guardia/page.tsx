@@ -17,6 +17,10 @@ export default function RondasGuardiaPage() {
     const [observacion, setObservacion] = useState("");
     const [rondas, setRondas] = useState<any[]>([]);
     const [sectores, setSectores] = useState<any[]>([]);
+
+    // 🔎 UX: mostrar 2 últimas rondas por defecto + búsqueda + historial
+    const [busqueda, setBusqueda] = useState("");
+    const [mostrarHistorialCompleto, setMostrarHistorialCompleto] = useState(false);
     const [latitud, setLatitud] = useState<number | null>(null);
     const [longitud, setLongitud] = useState<number | null>(null);
     const [precisionGPS, setPrecisionGPS] = useState<number | null>(null);
@@ -441,6 +445,36 @@ useEffect(() => {
 }, [usuario]);
 
 
+// 🔎 FILTRO Y VISTA DEL HISTORIAL
+const terminoBusqueda = busqueda.trim().toLowerCase();
+
+const rondasFiltradas = terminoBusqueda
+  ? rondas.filter((ronda) => {
+      const textoBusqueda = [
+        ronda.sector,
+        ronda.observacion,
+        ronda.created_at
+          ? new Date(ronda.created_at).toLocaleDateString("es-EC")
+          : "",
+        ronda.created_at
+          ? new Date(ronda.created_at).toLocaleTimeString("es-EC")
+          : "",
+        ronda.id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return textoBusqueda.includes(terminoBusqueda);
+    })
+  : rondas;
+
+const rondasVisibles =
+  terminoBusqueda || mostrarHistorialCompleto
+    ? rondasFiltradas
+    : rondasFiltradas.slice(0, 2);
+
+
 if (loading) {
   return <p>Cargando...</p>;
 }
@@ -853,22 +887,90 @@ onClick={() => {
             marginTop: 0,
           }}
         >
-          📋 Últimas rondas
+          📋 Historial de rondas
         </h2>
 
-        {rondas.length === 0 ? (
+        <div
+          style={{
+            marginTop: 8,
+            marginBottom: 14,
+            color: "#6b7280",
+            fontSize: 14,
+          }}
+        >
+          {terminoBusqueda
+            ? `Resultados de búsqueda: ${rondasFiltradas.length}`
+            : mostrarHistorialCompleto
+            ? `Mostrando el historial completo: ${rondas.length} registros`
+            : `Mostrando las ${Math.min(2, rondas.length)} últimas de ${rondas.length} registros`}
+        </div>
+
+        <input
+          type="text"
+          placeholder="🔎 Buscar por sector, observación, fecha o registro"
+          value={busqueda}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            if (e.target.value.trim()) {
+              setMostrarHistorialCompleto(true);
+            }
+          }}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            marginBottom: 12,
+            padding: "12px 14px",
+            borderRadius: 10,
+            border: "1px solid #d1d5db",
+            fontSize: 14,
+            background: "#fff",
+          }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: 8,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setMostrarHistorialCompleto(!mostrarHistorialCompleto)
+            }
+            style={{
+              border: "1px solid #dbe3ea",
+              background: "#fff",
+              color: "#2563eb",
+              padding: "9px 14px",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 13,
+            }}
+          >
+            {mostrarHistorialCompleto
+              ? "⬆️ Ver solo las 2 últimas"
+              : "📂 Ver historial completo"}
+          </button>
+        </div>
+
+        {rondasVisibles.length === 0 ? (
 
   <p
     style={{
       color: "#6b7280",
     }}
   >
-    Aún no existen rondas registradas.
+    {terminoBusqueda
+      ? "No se encontraron rondas con esa búsqueda."
+      : "Aún no existen rondas registradas."}
   </p>
 
 ) : (
 
-  rondas.map((ronda) => (
+  rondasVisibles.map((ronda) => (
 
     <div
       key={ronda.id}

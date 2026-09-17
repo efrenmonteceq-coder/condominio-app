@@ -15,6 +15,14 @@ export default function SolicitudesAprobadas() {
     setSolicitudes] =
     useState<any[]>([]);
 
+  const [busqueda,
+    setBusqueda] =
+    useState("");
+
+  const [mostrarHistorial,
+    setMostrarHistorial] =
+    useState(false);
+
   useEffect(() => {
 
     if (
@@ -82,6 +90,36 @@ export default function SolicitudesAprobadas() {
 
   }
 
+  // 🔥 ÚLTIMAS 2 + BÚSQUEDA + HISTORIAL
+  const terminoBusqueda =
+    busqueda.trim().toLowerCase();
+
+  const solicitudesFiltradas =
+    solicitudes.filter((solicitud) => {
+
+      const textoBusqueda = [
+        solicitud.descripcion,
+        solicitud.categoria,
+        solicitud.proveedor_sugerido,
+        solicitud.valor_solicitado,
+        solicitud.fecha_aprobacion,
+        solicitud.comentario_aprobacion,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return textoBusqueda.includes(
+        terminoBusqueda
+      );
+    });
+
+  const solicitudesVisibles =
+    terminoBusqueda ||
+    mostrarHistorial
+      ? solicitudesFiltradas
+      : solicitudesFiltradas.slice(0, 2);
+
   return (
 
     <div
@@ -100,11 +138,106 @@ export default function SolicitudesAprobadas() {
 
       <div
         style={{
+          background: "#fff",
+          padding: 20,
+          borderRadius: 16,
+          marginTop: 20,
+          boxShadow:
+            "0 2px 8px rgba(0,0,0,0.08)",
+        }}
+      >
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
+            marginBottom: 15,
+          }}
+        >
+
+          <strong>
+            📚 Solicitudes aprobadas
+          </strong>
+
+            <button
+              type="button"
+              onClick={() =>
+                setMostrarHistorial(
+                  !mostrarHistorial
+                )
+              }
+              style={{
+                background: "#111827",
+                color: "#fff",
+                border: "none",
+                borderRadius: 10,
+                padding: "10px 15px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              {mostrarHistorial
+                ? "⬆️ Ver solo las 2 últimas"
+                : "📂 Ver historial completo"}
+            </button>
+
+        </div>
+
+        <input
+          placeholder="🔎 Buscar descripción, categoría, proveedor o fecha..."
+          value={busqueda}
+          onChange={(e) => {
+            const valor =
+              e.target.value;
+
+            setBusqueda(valor);
+
+            if (valor.trim()) {
+              setMostrarHistorial(true);
+            }
+          }}
+          style={{
+            width: "100%",
+            padding: 12,
+            border:
+              "1px solid #d1d5db",
+            borderRadius: 10,
+            boxSizing:
+              "border-box",
+            fontSize: 15,
+          }}
+        />
+
+        <div
+          style={{
+            marginTop: 10,
+            marginBottom: 5,
+            color: "#6b7280",
+            fontSize: 14,
+          }}
+        >
+          {terminoBusqueda
+            ? `Resultados encontrados: ${solicitudesVisibles.length}`
+            : mostrarHistorial
+              ? `Historial completo: ${solicitudes.length} solicitudes`
+              : `Últimas solicitudes: ${Math.min(
+                  solicitudes.length,
+                  2
+                )}`}
+        </div>
+
+      </div>
+
+      <div
+        style={{
           marginTop: 20,
         }}
       >
 
-        {solicitudes.length === 0 && (
+        {solicitudesVisibles.length === 0 && (
 
           <div
             style={{
@@ -123,7 +256,7 @@ export default function SolicitudesAprobadas() {
 
         )}
 
-        {solicitudes.map(
+        {solicitudesVisibles.map(
           (solicitud) => (
 
             <div

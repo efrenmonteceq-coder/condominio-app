@@ -2469,17 +2469,6 @@ if (rol === "DIRECTIVA") {
           >
 
             <CardPremium
-              titulo="📊 Informe de ingresos"
-              valor="Pagados y pendientes"
-              color="#16a34a"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
-            />
-
-            <CardPremium
               titulo="🧾 Gastos"
               valor={`$${gastos.toFixed(2)}`}
               color="#dc2626"
@@ -2503,6 +2492,17 @@ if (rol === "DIRECTIVA") {
               onClick={() =>
                 router.push(
                   "/pagos"
+                )
+              }
+            />
+
+            <CardPremium
+              titulo="📊 Informe de ingresos"
+              valor="Pagados y pendientes"
+              color="#16a34a"
+              onClick={() =>
+                router.push(
+                  "/reportes/ingresos"
                 )
               }
             />

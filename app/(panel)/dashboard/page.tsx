@@ -23,6 +23,8 @@ export default function Dashboard() {
       .toUpperCase()
       .trim();
 
+  const dashboardCargaIniciadaRef = useRef<string | null>(null);
+
   // 🔥 KPIs
 
   const [viviendas,
@@ -104,10 +106,6 @@ const [limiteGastoAdmin,
   // ⏳ CARGA COMPLETA DEL DASHBOARD
   // Evita mostrar KPIs en cero mientras las consultas de Supabase terminan.
   const [cargandoDashboard, setCargandoDashboard] = useState(true);
-
-  // 🔒 Evita que el efecto de inicialización dispare dos cargas simultáneas
-  // para la misma urbanización cuando useAuth termina de hidratarse.
-  const dashboardCargaIniciadaRef = useRef<string | null>(null);
 
   // 🏘️ CARGAR NOMBRE DE LA URBANIZACIÓN
   // Esta consulta es independiente de la carga de KPIs.
@@ -1008,7 +1006,8 @@ if (rol === "RESIDENTE") {
           <button
             className="residente-mobile-card residente-card-verde"
             style={{ background: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)", borderTop: "3px solid #10b981" }}
-            onClick={() =>              router.push("/estado-cuenta")
+            onClick={() =>
+              router.push("/estado-cuenta")
             }
           >
             <div
@@ -2007,6 +2006,7 @@ if (rol === "DIRECTIVA") {
               )
             }
           />
+
         </div>
       </div>
 
@@ -2264,7 +2264,6 @@ if (rol === "DIRECTIVA") {
           </div>
 
           <div className="admin-mobile-section">
-            <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>🏘️</span> Gestión de la urbanización</div>
             <div className="admin-mobile-grid">
               <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/viviendas")}>
@@ -2286,9 +2285,6 @@ if (rol === "DIRECTIVA") {
             </div>
           </div>
 
-          <div className="admin-mobile-section">
-            <div className="admin-mobile-section-title"><span>⚙️</span> Administración</div>
-            <div className="admin-mobile-grid">
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>⚙️</span> Administración</div>
             <div className="admin-mobile-grid">
@@ -3026,6 +3022,7 @@ function IconoAdminMovil({
     </svg>
   );
 }
+
 // 🎨 ICONOS MODERNOS PARA EL DASHBOARD MÓVIL
 
 function IconoMovil({

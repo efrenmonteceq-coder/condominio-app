@@ -2264,36 +2264,31 @@ if (rol === "DIRECTIVA") {
           </div>
 
           <div className="admin-mobile-section">
+            <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>🏘️</span> Gestión de la urbanización</div>
             <div className="admin-mobile-grid">
-              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/reportes/viviendas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Viviendas</div><div className="admin-mobile-card-value">{viviendas}</div><div className="admin-mobile-card-subtitle">Unidades registradas</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/viviendas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Gestión de Viviendas</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar viviendas.</div><div className="admin-mobile-arrow">→</div>
               </button>
-              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/reportes/residentes")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Residentes</div><div className="admin-mobile-card-value">{residentes}</div><div className="admin-mobile-card-subtitle">Personas registradas</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/residentes")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Gestión de Residentes</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar residentes.</div><div className="admin-mobile-arrow">→</div>
               </button>
-              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/reportes/guardias")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Guardias</div><div className="admin-mobile-card-value">{guardias}</div><div className="admin-mobile-card-subtitle">Personal registrado</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/guardias")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Gestión de Guardias</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar guardias.</div><div className="admin-mobile-arrow">→</div>
               </button>
               <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/avisos")}>
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="avisos" /></div>
-                <div className="admin-mobile-card-title">Avisos y lecturas de avisos</div>
-                <div className="admin-mobile-card-value">{avisosPublicadosAdmin}</div>
-                <div className="admin-mobile-card-subtitle">{avisosPublicadosAdmin === 1 ? "1 aviso publicado" : `${avisosPublicadosAdmin} avisos publicados`} · {lecturasPendientesAdmin === 1 ? "1 lectura pendiente" : `${lecturasPendientesAdmin} lecturas pendientes`}</div>
+                <div className="admin-mobile-card-title">Gestión de Avisos</div>
+                <div className="admin-mobile-card-value">Gestionar</div>
+                <div className="admin-mobile-card-subtitle">Publica avisos y controla sus lecturas.</div>
                 <div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-rose" onClick={() => router.push("/reportes/novedades")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="novedades" /></div><div className="admin-mobile-card-title">Novedades hoy</div><div className="admin-mobile-card-value">{novedades}</div><div className="admin-mobile-card-subtitle">Situaciones por atender</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/visitas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="visitas" /></div><div className="admin-mobile-card-title">Visitas hoy</div><div className="admin-mobile-card-value">{visitasHoy}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-cyan" onClick={() => router.push("/reportes/reservas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="reservas" /></div><div className="admin-mobile-card-title">Reservas hoy</div><div className="admin-mobile-card-value">{reservasHoy}</div><div className="admin-mobile-card-subtitle">Áreas reservadas</div><div className="admin-mobile-arrow">→</div>
               </button>
             </div>
           </div>
 
+          <div className="admin-mobile-section">
+            <div className="admin-mobile-section-title"><span>⚙️</span> Administración</div>
+            <div className="admin-mobile-grid">
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>⚙️</span> Administración</div>
             <div className="admin-mobile-grid">
@@ -2335,6 +2330,30 @@ if (rol === "DIRECTIVA") {
               </button>
             </div>
           </div>
+          <div className="admin-mobile-section">
+            <div className="admin-mobile-section-title"><span>📊</span> Informes</div>
+            <div className="admin-mobile-grid">
+              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/reportes/viviendas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Informe de Viviendas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen de unidades registradas.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/reportes/residentes")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Informe de Residentes</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen de residentes registrados.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/reportes/guardias")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Informe de Guardias</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen del personal registrado.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-rose" onClick={() => router.push("/reportes/novedades")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="novedades" /></div><div className="admin-mobile-card-title">Informe de Novedades</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Situaciones registradas para seguimiento.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/visitas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="visitas" /></div><div className="admin-mobile-card-title">Informe de Visitas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Ingresos registrados en la urbanización.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-cyan" onClick={() => router.push("/reportes/reservas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="reservas" /></div><div className="admin-mobile-card-title">Informe de Reservas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Reservas de áreas comunes.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* 🔥 DASHBOARD ADMIN - ESCRITORIO */}

@@ -998,7 +998,6 @@ if (rol === "RESIDENTE") {
             </div>
           </div>
         </div>
-
         {/* ACCIONES PRINCIPALES */}
 
         <div className="residente-mobile-grid">
@@ -1997,8 +1996,7 @@ if (rol === "DIRECTIVA") {
           />
 
           <CardPremium
-            titulo="💰 Límite Administrador"
-            valor={`$${limiteGastoAdmin.toFixed(2)}`}
+            titulo="💰 Límite Administrador"            valor={`$${limiteGastoAdmin.toFixed(2)}`}
             color="#7c3aed"
             onClick={() =>
               router.push(
@@ -2242,21 +2240,15 @@ if (rol === "DIRECTIVA") {
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>💰</span> Resumen financiero</div>
             <div className="admin-mobile-grid">
-              <button type="button" className="admin-mobile-card admin-card-green" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado</div><div className="admin-mobile-card-value">${recaudado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div><div className="admin-mobile-arrow">→</div>
-              </button>
+              <div className="admin-mobile-card admin-card-green">
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado</div><div className="admin-mobile-card-value">${recaudado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div>
+              </div>
               <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos</div><div className="admin-mobile-card-value">${gastos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos administrativos</div><div className="admin-mobile-arrow">→</div>
               </button>
               <div className="admin-mobile-card admin-card-blue">
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo</div><div className="admin-mobile-card-value">${saldo.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Balance actual</div>
               </div>
-              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="pendientes" /></div><div className="admin-mobile-card-title">Pendientes</div><div className="admin-mobile-card-value">{pagosPendientes}</div><div className="admin-mobile-card-subtitle">Pagos pendientes</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="vencidos" /></div><div className="admin-mobile-card-title">Vencidos</div><div className="admin-mobile-card-value">{pagosVencidos}</div><div className="admin-mobile-card-subtitle">Pagos vencidos</div><div className="admin-mobile-arrow">→</div>
-              </button>
               <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/pagos")}>
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="validar" /></div><div className="admin-mobile-card-title">Por validar</div><div className="admin-mobile-card-value">{pagosValidar}</div><div className="admin-mobile-card-subtitle">Comprobantes pendientes</div><div className="admin-mobile-arrow">→</div>
               </button>
@@ -2346,6 +2338,9 @@ if (rol === "DIRECTIVA") {
               </button>
               <button type="button" className="admin-mobile-card admin-card-cyan" onClick={() => router.push("/reportes/reservas")}>
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="reservas" /></div><div className="admin-mobile-card-title">Informe de Reservas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Reservas de áreas comunes.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-green" onClick={() => router.push("/reportes/ingresos")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Informe de ingresos: pagados y pendientes</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Detalle de ingresos pagados y pendientes.</div><div className="admin-mobile-arrow">→</div>
               </button>
             </div>
           </div>
@@ -2474,8 +2469,8 @@ if (rol === "DIRECTIVA") {
           >
 
             <CardPremium
-              titulo="💰 Recaudado"
-              valor={`$${recaudado.toFixed(2)}`}
+              titulo="📊 Informe de ingresos"
+              valor="Pagados y pendientes"
               color="#16a34a"
               onClick={() =>
                 router.push(
@@ -2499,28 +2494,6 @@ if (rol === "DIRECTIVA") {
               titulo="📊 Saldo"
               valor={`$${saldo.toFixed(2)}`}
               color="#2563eb"
-            />
-
-            <CardPremium
-              titulo="⚠ Pendientes"
-              valor={pagosPendientes}
-              color="#f59e0b"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="🚨 Vencidos"
-              valor={pagosVencidos}
-              color="#dc2626"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
             />
 
             <CardPremium
@@ -3022,7 +2995,6 @@ function IconoAdminMovil({
     </svg>
   );
 }
-
 // 🎨 ICONOS MODERNOS PARA EL DASHBOARD MÓVIL
 
 function IconoMovil({

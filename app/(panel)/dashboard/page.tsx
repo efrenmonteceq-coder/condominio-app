@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -104,6 +104,10 @@ const [limiteGastoAdmin,
   // ⏳ CARGA COMPLETA DEL DASHBOARD
   // Evita mostrar KPIs en cero mientras las consultas de Supabase terminan.
   const [cargandoDashboard, setCargandoDashboard] = useState(true);
+
+  // 🔒 Evita que el efecto de inicialización dispare dos cargas simultáneas
+  // para la misma urbanización cuando useAuth termina de hidratarse.
+  const dashboardCargaIniciadaRef = useRef<string | null>(null);
 
   // 🏘️ CARGAR NOMBRE DE LA URBANIZACIÓN
   // Esta consulta es independiente de la carga de KPIs.
@@ -688,9 +692,16 @@ if (rol === "DIRECTIVA") {
       return;
     }
 
+    const claveCarga = `${usuario.id || "usuario"}:${usuario.condominio_id}`;
+
+    if (dashboardCargaIniciadaRef.current === claveCarga) {
+      return;
+    }
+
+    dashboardCargaIniciadaRef.current = claveCarga;
     cargarDatos();
 
-  }, [loading, usuario?.condominio_id, rol]);
+  }, [loading, usuario?.condominio_id, usuario?.id, rol]);
 
 
   // 🔒 LOADING

@@ -74,7 +74,9 @@ const [cargandoPaquetes, setCargandoPaquetes] =
   const [mostrarHistorial, setMostrarHistorial] =
   useState(false);
 
-  // Controla si dentro del historial se muestran todos los registros
+  
+  const [mostrarIngreso, setMostrarIngreso] = useState(false);
+// Controla si dentro del historial se muestran todos los registros
   // o solamente los 2 más recientes. No debe confundirse con la pestaña Historial.
   const [mostrarTodoHistorial, setMostrarTodoHistorial] =
   useState(false);
@@ -199,6 +201,7 @@ const [mensajeEntrega, setMensajeEntrega] =
     if (termino.length < 2) {
       setResultados([]);
       setSeleccionado(null);
+              setMostrarIngreso(true);
       setError("");
       return;
     }
@@ -476,10 +479,7 @@ const cargarPaquetesPendientes = async () => {
     // OBTENER PAQUETES PENDIENTES
     // ==========================================
 
-    const {
-      data: paquetes,
-      error: errorPaquetes,
-    } = await supabase
+    let queryPendientes = supabase
       .from("paqueteria")
       .select(
         `
@@ -500,13 +500,25 @@ const cargarPaquetesPendientes = async () => {
       .eq(
         "estado",
         "PENDIENTE"
-      )
-      .order(
-        "fecha_recepcion",
-        {
-          ascending: false,
-        }
       );
+
+    // RESIDENTE: solamente sus propios paquetes.
+    if (rol === "RESIDENTE") {
+      queryPendientes = queryPendientes.eq(
+        "residente_id",
+        usuario.id
+      );
+    }
+
+    const {
+      data: paquetes,
+      error: errorPaquetes,
+    } = await queryPendientes.order(
+      "fecha_recepcion",
+      {
+        ascending: false,
+      }
+    );
 
     if (errorPaquetes) {
       throw errorPaquetes;
@@ -656,10 +668,7 @@ const cargarHistorialPaquetes = async () => {
       usuario.condominio_id
     );
 
-    const {
-      data: paquetes,
-      error: errorPaquetes,
-    } = await supabase
+    let queryHistorial = supabase
       .from("paqueteria")
       .select(
         `
@@ -685,12 +694,24 @@ const cargarHistorialPaquetes = async () => {
         "condominio_id",
         usuario.condominio_id
       )
-      .order(
-        "fecha_recepcion",
-        {
-          ascending: false,
-        }
+;
+
+    if (rol === "RESIDENTE") {
+      queryHistorial = queryHistorial.eq(
+        "residente_id",
+        usuario.id
       );
+    }
+
+    const {
+      data: paquetes,
+      error: errorPaquetes,
+    } = await queryHistorial.order(
+      "fecha_recepcion",
+      {
+        ascending: false,
+      }
+    );
 
     if (errorPaquetes) {
       console.error(
@@ -1197,6 +1218,47 @@ const registrarPaquete = async () => {
             BOTONES PRINCIPALES
             ====================================== */}
 
+        {(rol === "GUARDIA" || rol === "ADMIN") && (
+          <button
+            type="button"
+            onClick={() => {
+              setMostrarIngreso(true);
+              setMostrarHistorial(false);
+              setMostrarTodoHistorial(false);
+              setBusqueda("");
+              setResultados([]);
+              setSeleccionado(null);
+              setMensajeRegistro("");
+              setEmpresaEntrega("");
+              setDescripcion("");
+              setObservacion("");
+
+              setTimeout(() => {
+                document
+                  .getElementById("paqueteria-ingreso")
+                  ?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+              }, 50);
+            }}
+            style={{
+              width: "100%",
+              padding: "13px 16px",
+              marginBottom: 12,
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 15,
+              background: "#166534",
+              color: "#ffffff",
+            }}
+          >
+            📦 Ingresar paquete
+          </button>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -1205,47 +1267,51 @@ const registrarPaquete = async () => {
             marginBottom: 20,
           }}
         >
-          <button
-            type="button"
-            onClick={() => {
-              setMostrarHistorial(false);
-              setMostrarTodoHistorial(false);
-              cargarPaquetesPendientes();
-            }}
-            style={{
-              flex: 1,
-              padding: "12px 14px",
-              border: "none",
-              borderRadius: 10,
-              cursor: "pointer",
-              fontWeight: 700,
-              background: !mostrarHistorial ? "#111827" : "#f3f4f6",
-              color: !mostrarHistorial ? "#ffffff" : "#374151",
-            }}
-          >
-            📋 Pendientes
-          </button>
+          {(rol === "GUARDIA" || rol === "ADMIN") && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setMostrarHistorial(false);
+                  setMostrarTodoHistorial(false);
+                  cargarPaquetesPendientes();
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px 14px",
+                  border: "none",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  background: !mostrarHistorial ? "#111827" : "#f3f4f6",
+                  color: !mostrarHistorial ? "#ffffff" : "#374151",
+                }}
+              >
+                📋 Pendientes
+              </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setMostrarHistorial(true);
-              setMostrarTodoHistorial(false);
-              cargarHistorialPaquetes();
-            }}
-            style={{
-              flex: 1,
-              padding: "12px 14px",
-              border: "none",
-              borderRadius: 10,
-              cursor: "pointer",
-              fontWeight: 700,
-              background: mostrarHistorial ? "#111827" : "#f3f4f6",
-              color: mostrarHistorial ? "#ffffff" : "#374151",
-            }}
-          >
-            🗂️ Historial
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMostrarHistorial(true);
+                  setMostrarTodoHistorial(false);
+                  cargarHistorialPaquetes();
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px 14px",
+                  border: "none",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  background: mostrarHistorial ? "#111827" : "#f3f4f6",
+                  color: mostrarHistorial ? "#ffffff" : "#374151",
+                }}
+              >
+                🗂️ Historial
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1287,6 +1353,98 @@ const registrarPaquete = async () => {
       {!cargandoUsuario && usuario && (
         <>
           {/* ==================================
+              RESIDENTE - SOLO CONSULTA
+              ================================== */}
+
+          {rol === "RESIDENTE" && (
+            <div style={{ marginTop: 30 }}>
+              <div
+                style={{
+                  padding: 20,
+                  borderRadius: 14,
+                  border: "1px solid #dbeafe",
+                  background: "#eff6ff",
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#1e3a8a" }}>
+                  📦 Mis paquetes
+                </div>
+                <div style={{ marginTop: 7, color: "#475569" }}>
+                  Aquí aparecerán los paquetes registrados por la administración o seguridad para tu vivienda.
+                </div>
+              </div>
+
+              {cargandoPaquetes && (
+                <div style={{ padding: 18, background: "#f9fafb", borderRadius: 12, color: "#6b7280" }}>
+                  📦 Cargando tus paquetes...
+                </div>
+              )}
+
+              {!cargandoPaquetes && paquetesPendientes.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", background: "#f9fafb", borderRadius: 12, color: "#6b7280", border: "1px solid #e5e7eb" }}>
+                  📭 No tienes paquetes pendientes.
+                </div>
+              )}
+
+              {!cargandoPaquetes && paquetesPendientes.length > 0 && (
+                <div style={{ display: "grid", gap: 14 }}>
+                  {paquetesPendientes.map((paquete) => (
+                    <div key={paquete.id} style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 18, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>📦 Paquete recibido</div>
+                      <div style={{ marginTop: 8, color: "#374151" }}>🏠 {paquete.vivienda?.codigo_vivienda || "Vivienda"}</div>
+                      {paquete.empresa_entrega && <div style={{ marginTop: 8, color: "#374151" }}>🚚 {paquete.empresa_entrega}</div>}
+                      {paquete.descripcion && <div style={{ marginTop: 6, color: "#374151" }}>📦 {paquete.descripcion}</div>}
+                      {paquete.observacion && <div style={{ marginTop: 6, color: "#6b7280" }}>📝 {paquete.observacion}</div>}
+                      <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>🕐 Recibido: {new Date(paquete.fecha_recepcion).toLocaleString("es-EC")}</div>
+                      <div style={{ marginTop: 12, display: "inline-block", padding: "5px 10px", borderRadius: 999, background: "#fef3c7", color: "#92400e", fontSize: 12, fontWeight: 700 }}>
+                        🟠 PENDIENTE DE ENTREGA
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {mostrarIngreso && (
+            <div
+              id="paqueteria-ingreso"
+              style={{
+                marginTop: 18,
+                marginBottom: 14,
+                padding: 14,
+                borderRadius: 12,
+                background: "#ecfdf5",
+                border: "1px solid #bbf7d0",
+              }}
+            >
+              <div style={{ fontWeight: 800, color: "#166534", fontSize: 18 }}>
+                📦 Ingreso de paquete
+              </div>
+              <div style={{ marginTop: 5, color: "#475569", fontSize: 14 }}>
+                Busca al residente o código de vivienda para registrar el paquete recibido.
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarIngreso(false)}
+                style={{
+                  marginTop: 10,
+                  padding: "7px 11px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  background: "#ffffff",
+                  color: "#374151",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ✕ Cerrar ingreso
+              </button>
+            </div>
+          )}
+
+{/* ==================================
               BUSCADOR
               SOLO GUARDIA Y ADMIN
               ================================== */}
@@ -1491,10 +1649,10 @@ const registrarPaquete = async () => {
 
                   {/* ==================================
                       FORMULARIO DEL PAQUETE
-                      SOLO GUARDIA
+                      SOLO GUARDIA Y ADMIN
                       ================================== */}
 
-                  {rol === "GUARDIA" && (
+                  {(rol === "GUARDIA" || rol === "ADMIN") && (
                     <div
                       style={{
                         marginTop: 20,
@@ -1658,7 +1816,7 @@ const registrarPaquete = async () => {
               PAQUETES PENDIENTES
               ================================== */}
 
-          {!mostrarHistorial && (
+          {(rol === "GUARDIA" || rol === "ADMIN") && !mostrarHistorial && (
             <div style={{ marginTop: 30 }}>
               <div
                 style={{
@@ -1798,7 +1956,7 @@ const registrarPaquete = async () => {
               HISTORIAL DE PAQUETES
               ================================== */}
 
-          {mostrarHistorial && (
+          {(rol === "GUARDIA" || rol === "ADMIN") && mostrarHistorial && (
             <div style={{ marginTop: 30 }}>
               <div
                 style={{

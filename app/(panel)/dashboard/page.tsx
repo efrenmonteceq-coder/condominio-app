@@ -997,8 +997,7 @@ if (rol === "RESIDENTE") {
               className="residente-mobile-icon residente-icon-svg"
               style={{
                 width: 58,
-                height: 58,
-                minWidth: 58,
+                height: 58,                minWidth: 58,
                 borderRadius: 18,
                 display: "flex",
                 alignItems: "center",
@@ -1997,8 +1996,7 @@ if (rol === "DIRECTIVA") {
 
           <CardPremium
             titulo="⚙️ Configuración Financiera"
-            valor="Consultar"
-            color="#7c3aed"
+            valor="Consultar"            color="#7c3aed"
             onClick={() =>
               router.push(
                 "/configuracion-financiera"
@@ -2997,8 +2995,7 @@ function IconoMovil({
     ),
     visitas: (
       <>
-        <path d="M5 17h14l-1-6H6l-1 6Z" />
-        <path d="M7 11 9 7h6l2 4" />
+        <path d="M5 17h14l-1-6H6l-1 6Z" />        <path d="M7 11 9 7h6l2 4" />
         <circle cx="8" cy="17" r="1.5" />
         <circle cx="16" cy="17" r="1.5" />
       </>

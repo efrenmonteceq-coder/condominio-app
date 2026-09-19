@@ -79,6 +79,12 @@ export default function Dashboard() {
   const [mesTransparencia, setMesTransparencia] =
     useState("");
 
+  // 💰 ADMIN MÓVIL · selector financiero independiente
+  // Evita que el selector compartido con otras vistas afecte la actualización
+  // inmediata de los bloques financieros del ADMIN en móvil.
+  const [mesTransparenciaAdminMovil, setMesTransparenciaAdminMovil] =
+    useState("");
+
   const [visitasHoy,
     setVisitasHoy] =
     useState(0);
@@ -842,6 +848,37 @@ if (rol === "DIRECTIVA") {
       saldoAcumulado: 0,
     };
 
+
+  // 💰 ADMIN MÓVIL · sincronización inicial del período
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparenciaAdminMovil("");
+      return;
+    }
+
+    setMesTransparenciaAdminMovil((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) {
+        return mesActual;
+      }
+
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaSeleccionadaAdminMovil = useMemo(() => {
+    return (
+      transparenciaMensual.find(
+        (item) => item.mes === mesTransparenciaAdminMovil
+      ) || {
+        mes: mesTransparenciaAdminMovil,
+        ingresos: 0,
+        egresos: 0,
+        resultado: 0,
+        saldoAcumulado: 0,
+      }
+    );
+  }, [transparenciaMensual, mesTransparenciaAdminMovil]);
+
   const formatoMesTransparencia = (mes: string) => {
     if (!mes) {
       return "Sin información";
@@ -997,7 +1034,6 @@ if (rol === "RESIDENTE") {
             reservas y comprobantes.
           </p>
         </div>
-
         <div
           style={{
             display: "grid",
@@ -1997,8 +2033,7 @@ if (rol === "RESIDENTE") {
                   <IconoAdminMovil tipo="residentes" />
                 </span>
                 <strong>{residentes}</strong>
-                <small>Residentes</small>
-              </div>
+                <small>Residentes</small>              </div>
             </div>
           </div>
         </div>
@@ -2581,7 +2616,7 @@ if (rol === "DIRECTIVA") {
               }}
             >
               Período: {formatoMesTransparencia(
-                transparenciaSeleccionada.mes
+                transparenciaSeleccionadaAdminMovil.mes
               )}
             </div>
 
@@ -2596,15 +2631,15 @@ if (rol === "DIRECTIVA") {
               <button
                 type="button"
                 disabled={
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                  !mesTransparenciaAdminMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) <= 0
                 }
                 onClick={() => {
                   const indice = mesesTransparencia.indexOf(
-                    mesTransparencia
+                    mesTransparenciaAdminMovil
                   );
                   if (indice > 0) {
-                    setMesTransparencia(
+                    setMesTransparenciaAdminMovil(
                       mesesTransparencia[indice - 1]
                     );
                   }
@@ -2622,9 +2657,9 @@ if (rol === "DIRECTIVA") {
               </button>
 
               <select
-                value={mesTransparencia}
+                value={mesTransparenciaAdminMovil}
                 onChange={(e) =>
-                  setMesTransparencia(e.target.value)
+                  setMesTransparenciaAdminMovil(e.target.value)
                 }
                 style={{
                   flex: 1,
@@ -2651,19 +2686,19 @@ if (rol === "DIRECTIVA") {
               <button
                 type="button"
                 disabled={
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) ===
+                  !mesTransparenciaAdminMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) ===
                     mesesTransparencia.length - 1
                 }
                 onClick={() => {
                   const indice = mesesTransparencia.indexOf(
-                    mesTransparencia
+                    mesTransparenciaAdminMovil
                   );
                   if (
                     indice >= 0 &&
                     indice < mesesTransparencia.length - 1
                   ) {
-                    setMesTransparencia(
+                    setMesTransparenciaAdminMovil(
                       mesesTransparencia[indice + 1]
                     );
                   }
@@ -2683,13 +2718,13 @@ if (rol === "DIRECTIVA") {
 
             <div className="admin-mobile-grid">
               <div className="admin-mobile-card admin-card-green">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.ingresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos del período seleccionado.</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.ingresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos del período seleccionado.</div>
               </div>
               <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
               </button>
               <div className="admin-mobile-card admin-card-blue">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Acumulado hasta el período seleccionado.</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Acumulado hasta el período seleccionado.</div>
               </div>
             </div>
 
@@ -2704,12 +2739,12 @@ if (rol === "DIRECTIVA") {
               <strong
                 style={{
                   color:
-                    transparenciaSeleccionada.resultado >= 0
+                    transparenciaSeleccionadaAdminMovil.resultado >= 0
                       ? "#16a34a"
                       : "#dc2626",
                 }}
               >
-                ${transparenciaSeleccionada.resultado.toFixed(2)}
+                ${transparenciaSeleccionadaAdminMovil.resultado.toFixed(2)}
               </strong>
             </div>
           </div>
@@ -2997,8 +3032,7 @@ if (rol === "DIRECTIVA") {
                 }
                 style={{
                   minWidth: 190,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",                  borderRadius: 10,
                   padding: "10px 12px",
                   background: "#fff",
                   fontWeight: 600,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +66,18 @@ export default function Dashboard() {
   const [saldo,
     setSaldo] =
     useState(0);
+
+  // 💰 TRANSPARENCIA FINANCIERA - ADMIN PC
+  // Conservamos los movimientos financieros para generar cortes mensuales
+  // sobre los mismos datos que alimentan los KPIs actuales.
+  const [pagosTransparencia, setPagosTransparencia] =
+    useState<any[]>([]);
+
+  const [gastosTransparencia, setGastosTransparencia] =
+    useState<any[]>([]);
+
+  const [mesTransparencia, setMesTransparencia] =
+    useState("");
 
   const [visitasHoy,
     setVisitasHoy] =
@@ -560,6 +572,10 @@ const vencidos =
         totalIngresos
       );
 
+      setPagosTransparencia(
+        pagosData || []
+      );
+
       // 🔥 GASTOS
 
       const {
@@ -587,6 +603,10 @@ const vencidos =
 
       setGastos(
         totalGastos
+      );
+
+      setGastosTransparencia(
+        gastosData || []
       );
 
       // ==========================================
@@ -701,6 +721,144 @@ if (rol === "DIRECTIVA") {
 
   }, [loading, usuario?.condominio_id, usuario?.id, rol]);
 
+  // 💰 TRANSPARENCIA FINANCIERA - CORTES MENSUALES
+  // Los meses se construyen desde el primer movimiento financiero disponible
+  // hasta el mes actual. Así también se pueden consultar meses sin movimientos.
+  const mesesTransparencia = useMemo(() => {
+    const meses = new Set<string>();
+
+    pagosTransparencia.forEach((pago) => {
+      if (pago.fecha_pago && pago.estado === "PAGADO") {
+        meses.add(String(pago.fecha_pago).slice(0, 7));
+      }
+    });
+
+    gastosTransparencia.forEach((gasto) => {
+      if (gasto.fecha_gasto) {
+        meses.add(String(gasto.fecha_gasto).slice(0, 7));
+      }
+    });
+
+    const mesesOrdenados = Array.from(meses).sort();
+
+    if (mesesOrdenados.length === 0) {
+      return [];
+    }
+
+    const inicio = new Date(`${mesesOrdenados[0]}-01T00:00:00`);
+    const hoy = new Date();
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const resultado: string[] = [];
+
+    let cursor = new Date(
+      inicio.getFullYear(),
+      inicio.getMonth(),
+      1
+    );
+
+    while (cursor <= fin) {
+      resultado.push(
+        `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+      );
+
+      cursor = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth() + 1,
+        1
+      );
+    }
+
+    return resultado;
+  }, [pagosTransparencia, gastosTransparencia]);
+
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparencia("");
+      return;
+    }
+
+    setMesTransparencia((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) {
+        return mesActual;
+      }
+
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaMensual = useMemo(() => {
+    const meses = mesesTransparencia.map((mes) => {
+      const ingresos = pagosTransparencia.reduce((total, pago) => {
+        if (
+          pago.estado !== "PAGADO" ||
+          !pago.fecha_pago ||
+          String(pago.fecha_pago).slice(0, 7) !== mes
+        ) {
+          return total;
+        }
+
+        return total + Number(pago.valor_pagado || 0);
+      }, 0);
+
+      const egresos = gastosTransparencia.reduce((total, gasto) => {
+        if (
+          !gasto.fecha_gasto ||
+          String(gasto.fecha_gasto).slice(0, 7) !== mes
+        ) {
+          return total;
+        }
+
+        return total + Number(gasto.total || 0);
+      }, 0);
+
+      return {
+        mes,
+        ingresos,
+        egresos,
+        resultado: ingresos - egresos,
+      };
+    });
+
+    let acumulado = 0;
+
+    return meses.map((item) => {
+      acumulado += item.resultado;
+
+      return {
+        ...item,
+        saldoAcumulado: acumulado,
+      };
+    });
+  }, [mesesTransparencia, pagosTransparencia, gastosTransparencia]);
+
+  const transparenciaSeleccionada =
+    transparenciaMensual.find(
+      (item) => item.mes === mesTransparencia
+    ) || {
+      mes: mesTransparencia,
+      ingresos: 0,
+      egresos: 0,
+      resultado: 0,
+      saldoAcumulado: 0,
+    };
+
+  const formatoMesTransparencia = (mes: string) => {
+    if (!mes) {
+      return "Sin información";
+    }
+
+    const [anio, mesNumero] = mes.split("-");
+    const fecha = new Date(
+      Number(anio),
+      Number(mesNumero) - 1,
+      1
+    );
+
+    return fecha.toLocaleDateString("es-EC", {
+      month: "long",
+      year: "numeric",
+    });
+  };
 
   // 🔒 LOADING
 
@@ -899,6 +1057,31 @@ if (rol === "RESIDENTE") {
             }
           />
         </div>
+
+        {/* TRANSPARENCIA FINANCIERA DEL RESIDENTE */}
+        <div style={{ marginTop: 30, marginBottom: 30, padding: 24, borderRadius: 24, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
+            <div>
+              <h2 style={{ margin: 0, marginBottom: 6 }}>Transparencia Financiera de la urbanización</h2>
+              <div style={{ color: "#64748b", fontSize: 14 }}>Corte mensual de ingresos, gastos y saldo acumulado.</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice > 0) setMesTransparencia(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0 ? 0.45 : 1 }}>←</button>
+              <select value={mesTransparencia} onChange={(e) => setMesTransparencia(e.target.value)} style={{ minWidth: 190, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff", fontWeight: 600, color: "#0f172a" }}>
+                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
+              </select>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparencia(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
+            </div>
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14, fontWeight: 600 }}>Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, border: "1px solid #dcfce7" }}><div style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Ingresos del mes</div><div style={{ marginTop: 8, fontSize: 24, fontWeight: 800, color: "#16a34a" }}>${transparenciaSeleccionada.ingresos.toFixed(2)}</div></div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, border: "1px solid #fee2e2" }}><div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>Gastos del mes</div><div style={{ marginTop: 8, fontSize: 24, fontWeight: 800, color: "#dc2626" }}>${transparenciaSeleccionada.egresos.toFixed(2)}</div></div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, border: "1px solid #dbeafe" }}><div style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>Resultado del mes</div><div style={{ marginTop: 8, fontSize: 24, fontWeight: 800, color: transparenciaSeleccionada.resultado >= 0 ? "#2563eb" : "#dc2626" }}>${transparenciaSeleccionada.resultado.toFixed(2)}</div></div>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 18, border: "1px solid #e9d5ff" }}><div style={{ color: "#6b21a8", fontSize: 13, fontWeight: 700 }}>Saldo acumulado</div><div style={{ marginTop: 8, fontSize: 24, fontWeight: 800, color: transparenciaSeleccionada.saldoAcumulado >= 0 ? "#7c3aed" : "#dc2626" }}>${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}</div></div>
+          </div>
+        </div>
+
       </div>
 
       {/* ==========================================
@@ -998,6 +1181,7 @@ if (rol === "RESIDENTE") {
             </div>
           </div>
         </div>
+
         {/* ACCIONES PRINCIPALES */}
 
         <div className="residente-mobile-grid">
@@ -1250,41 +1434,6 @@ if (rol === "RESIDENTE") {
           </button>
 
           <button
-            className="residente-mobile-card residente-card-verde"
-            style={{ background: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)", borderTop: "3px solid #10b981" }}
-            onClick={() =>
-              router.push("/gastos")
-            }
-          >
-            <div
-              className="residente-mobile-icon residente-icon-svg"
-              style={{
-                width: 58,
-                height: 58,
-                minWidth: 58,
-                borderRadius: 18,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "rgba(255,255,255,0.72)",
-                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
-              }}
-            >
-              <IconoMovil tipo="transparencia" />
-            </div>
-
-            <div className="residente-mobile-title">
-              Transparencia Financiera
-            </div>
-
-            <div className="residente-mobile-subtitle">
-              Consulta gastos y movimientos de tu urbanización.
-            </div>
-
-            <div className="residente-mobile-arrow">→</div>
-          </button>
-
-          <button
             className="residente-mobile-card residente-card-naranja"
             style={{ background: "linear-gradient(145deg, #fff7ed 0%, #fed7aa 100%)", borderTop: "3px solid #f97316" }}
             onClick={() =>
@@ -1365,6 +1514,28 @@ if (rol === "RESIDENTE") {
 
           </div>
         </div>
+
+          <div style={{ gridColumn: "1 / -1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 18, padding: 14 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div className="residente-mobile-title" style={{ margin: 0 }}>Transparencia Financiera</div>
+              <div className="residente-mobile-subtitle" style={{ marginTop: 4 }}>De la urbanización · corte mensual</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice > 0) setMesTransparencia(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0 ? 0.45 : 1 }}>←</button>
+              <select value={mesTransparencia} onChange={(e) => setMesTransparencia(e.target.value)} style={{ flex: 1, minWidth: 0, border: "1px solid #cbd5e1", borderRadius: 9, padding: "9px 10px", background: "#fff", fontWeight: 600, color: "#0f172a" }}>
+                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
+              </select>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparencia(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 10 }}>Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 9 }}>
+              <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#047857" }}>Ingresos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#065f46", marginTop: 4 }}>${transparenciaSeleccionada.ingresos.toFixed(2)}</div></div>
+              <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#be123c" }}>Gastos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#9f1239", marginTop: 4 }}>${transparenciaSeleccionada.egresos.toFixed(2)}</div></div>
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionada.resultado >= 0 ? "#1e3a8a" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionada.resultado.toFixed(2)}</div></div>
+              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#6d28d9" }}>Saldo acumulado</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionada.saldoAcumulado >= 0 ? "#5b21b6" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}</div></div>
+            </div>
+          </div>
+
 
       </div>
     </>
@@ -1894,117 +2065,166 @@ if (rol === "DIRECTIVA") {
           RESUMEN FINANCIERO
           ================================== */}
 
-      <div
-        style={{
-          marginBottom: 30,
-        }}
-      >
-        <h2
+      <div style={{ marginBottom: 30 }}>
+        <div
           style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 20,
+            flexWrap: "wrap",
             marginBottom: 20,
           }}
         >
-          💰 Resumen Financiero
-        </h2>
+          <div>
+            <h2 style={{ margin: 0, marginBottom: 6 }}>
+              💰 Resumen Financiero
+            </h2>
+            <div style={{ color: "#64748b", fontSize: 14 }}>
+              Resumen del período seleccionado de la urbanización.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              type="button"
+              disabled={
+                !mesTransparencia ||
+                mesesTransparencia.indexOf(mesTransparencia) <= 0
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparencia);
+                if (indice > 0) {
+                  setMesTransparencia(mesesTransparencia[indice - 1]);
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 10,
+                padding: "9px 12px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              ←
+            </button>
+
+            <select
+              value={mesTransparencia}
+              onChange={(e) => setMesTransparencia(e.target.value)}
+              style={{
+                minWidth: 190,
+                border: "1px solid #cbd5e1",
+                borderRadius: 10,
+                padding: "10px 12px",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#0f172a",
+              }}
+            >
+              {mesesTransparencia.length === 0 ? (
+                <option value="">Sin información</option>
+              ) : (
+                mesesTransparencia.map((mes) => (
+                  <option key={mes} value={mes}>
+                    {formatoMesTransparencia(mes)}
+                  </option>
+                ))
+              )}
+            </select>
+
+            <button
+              type="button"
+              disabled={
+                !mesTransparencia ||
+                mesesTransparencia.indexOf(mesTransparencia) ===
+                  mesesTransparencia.length - 1
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparencia);
+                if (
+                  indice >= 0 &&
+                  indice < mesesTransparencia.length - 1
+                ) {
+                  setMesTransparencia(mesesTransparencia[indice + 1]);
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 10,
+                padding: "9px 12px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              →
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 18,
+            color: "#475569",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}
+        </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit,minmax(250px,1fr))",
+            gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
             gap: 20,
           }}
         >
-
           <CardPremium
-            titulo="💰 Ingresos"
-            valor={`$${recaudado.toFixed(2)}`}
+            titulo="💰 Recaudado del mes"
+            valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
             color="#16a34a"
-            onClick={() =>
-              router.push(
-                "/reportes/ingresos"
-              )
-            }
           />
 
           <CardPremium
-            titulo="🧾 Gastos"
-            valor={`$${gastos.toFixed(2)}`}
+            titulo="🧾 Gastos del mes"
+            valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
             color="#dc2626"
-            onClick={() =>
-              router.push(
-                "/reportes/gastos"
-              )
-            }
           />
 
           <CardPremium
-            titulo="💵 Saldo"
-            valor={`$${saldo.toFixed(2)}`}
+            titulo="📊 Saldo acumulado"
+            valor={`$${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}`}
             color="#2563eb"
+          />
+
+          <CardPremium
+            titulo="📊 Resultado del mes"
+            valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
+            color={
+              transparenciaSeleccionada.resultado >= 0
+                ? "#16a34a"
+                : "#dc2626"
+            }
           />
 
           <CardPremium
             titulo="🔴 Cartera Vencida"
             valor={pagosVencidos}
             color="#dc2626"
-            onClick={() =>
-              router.push(
-                "/reportes/ingresos"
-              )
-            }
+            onClick={() => router.push("/reportes/ingresos")}
           />
-
-        </div>
-      </div>
-
-      {/* ==================================
-          CONTROL FINANCIERO
-          ================================== */}
-
-      <div
-        style={{
-          marginBottom: 30,
-        }}
-      >
-        <h2
-          style={{
-            marginBottom: 20,
-          }}
-        >
-          🏛️ Control Financiero
-        </h2>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit,minmax(250px,1fr))",
-            gap: 20,
-          }}
-        >
-
-          <CardPremium
-            titulo="📋 Solicitudes Pendientes"
-            valor={solicitudesPendientes}
-            color="#f59e0b"
-            onClick={() =>
-              router.push(
-                "/aprobaciones-directiva"
-              )
-            }
-          />
-
-          <CardPremium
-            titulo="💰 Límite Administrador"            valor={`$${limiteGastoAdmin.toFixed(2)}`}
-            color="#7c3aed"
-            onClick={() =>
-              router.push(
-                "/configuracion-financiera"
-              )
-            }
-          />
-
         </div>
       </div>
 
@@ -2035,7 +2255,7 @@ if (rol === "DIRECTIVA") {
         >
 
           <CardPremium
-            titulo="📋 Aprobaciones"
+            titulo="📋 Aprobaciones de gastos"
             valor="Revisar"
             color="#f59e0b"
             onClick={() =>
@@ -2087,58 +2307,180 @@ if (rol === "DIRECTIVA") {
 
         <div className="directiva-mobile-section">
           <div className="directiva-mobile-section-title">💰 Resumen Financiero</div>
-          <div className="directiva-mobile-grid">
-            <button type="button" className="directiva-mobile-card directiva-card-green" onClick={() => router.push("/reportes/ingresos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div>
-              <div className="directiva-mobile-card-title">Ingresos</div>
-              <div className="directiva-mobile-card-value">${recaudado.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Recaudación registrada.</div>
-              <div className="directiva-mobile-arrow">→</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0}
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparencia);
+                if (indice > 0) setMesTransparencia(mesesTransparencia[indice - 1]);
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              ←
             </button>
 
-            <button type="button" className="directiva-mobile-card directiva-card-red" onClick={() => router.push("/reportes/gastos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="gastos" /></div>
-              <div className="directiva-mobile-card-title">Gastos</div>
-              <div className="directiva-mobile-card-value">${gastos.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Gastos registrados.</div>
-              <div className="directiva-mobile-arrow">→</div>
-            </button>
+            <select
+              value={mesTransparencia}
+              onChange={(e) => setMesTransparencia(e.target.value)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "1px solid #cbd5e1",
+                borderRadius: 9,
+                padding: "9px 10px",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#0f172a",
+              }}
+            >
+              {mesesTransparencia.length === 0 ? (
+                <option value="">Sin información</option>
+              ) : (
+                mesesTransparencia.map((mes) => (
+                  <option key={mes} value={mes}>
+                    {formatoMesTransparencia(mes)}
+                  </option>
+                ))
+              )}
+            </select>
 
-            <button type="button" className="directiva-mobile-card directiva-card-blue">
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="saldo" /></div>
-              <div className="directiva-mobile-card-title">Saldo</div>
-              <div className="directiva-mobile-card-value">${saldo.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Balance actual.</div>
-            </button>
-
-            <button type="button" className="directiva-mobile-card directiva-card-red" onClick={() => router.push("/reportes/ingresos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="vencidos" /></div>
-              <div className="directiva-mobile-card-title">Cartera Vencida</div>
-              <div className="directiva-mobile-card-value">{pagosVencidos}</div>
-              <div className="directiva-mobile-card-subtitle">Pagos pendientes de recuperación.</div>
-              <div className="directiva-mobile-arrow">→</div>
+            <button
+              type="button"
+              disabled={
+                !mesTransparencia ||
+                mesesTransparencia.indexOf(mesTransparencia) ===
+                  mesesTransparencia.length - 1
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparencia);
+                if (
+                  indice >= 0 &&
+                  indice < mesesTransparencia.length - 1
+                ) {
+                  setMesTransparencia(mesesTransparencia[indice + 1]);
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              →
             </button>
           </div>
-        </div>
 
-        <div className="directiva-mobile-section">
-          <div className="directiva-mobile-section-title">🏛️ Control Financiero</div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#475569",
+              marginBottom: 10,
+            }}
+          >
+            Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}
+          </div>
+
           <div className="directiva-mobile-grid">
-            <button type="button" className="directiva-mobile-card directiva-card-orange" onClick={() => router.push("/aprobaciones-directiva")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="solicitudes" /></div>
-              <div className="directiva-mobile-card-title">Solicitudes Pendientes</div>
-              <div className="directiva-mobile-card-value">{solicitudesPendientes}</div>
-              <div className="directiva-mobile-card-subtitle">Solicitudes de gasto por revisar.</div>
-              <div className="directiva-mobile-arrow">→</div>
-            </button>
+            <div className="directiva-mobile-card directiva-card-green">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="recaudado" />
+              </div>
+              <div className="directiva-mobile-card-title">Recaudado del mes</div>
+              <div className="directiva-mobile-card-value">
+                ${transparenciaSeleccionada.ingresos.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Ingresos registrados del período.
+              </div>
+            </div>
 
-            <button type="button" className="directiva-mobile-card directiva-card-purple" onClick={() => router.push("/configuracion-financiera")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="finanzas" /></div>
-              <div className="directiva-mobile-card-title">Límite Administrador</div>
-              <div className="directiva-mobile-card-value">${limiteGastoAdmin.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Límite autorizado de gasto.</div>
+            <div className="directiva-mobile-card directiva-card-red">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="gastos" />
+              </div>
+              <div className="directiva-mobile-card-title">Gastos del mes</div>
+              <div className="directiva-mobile-card-value">
+                ${transparenciaSeleccionada.egresos.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Gastos registrados del período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-blue">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="saldo" />
+              </div>
+              <div className="directiva-mobile-card-title">Resultado del mes</div>
+              <div
+                className="directiva-mobile-card-value"
+                style={{
+                  color:
+                    transparenciaSeleccionada.resultado >= 0
+                      ? "#16a34a"
+                      : "#dc2626",
+                }}
+              >
+                ${transparenciaSeleccionada.resultado.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Ingresos menos gastos del período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-purple">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="saldo" />
+              </div>
+              <div className="directiva-mobile-card-title">Saldo acumulado</div>
+              <div
+                className="directiva-mobile-card-value"
+                style={{
+                  color:
+                    transparenciaSeleccionada.saldoAcumulado >= 0
+                      ? "#7c3aed"
+                      : "#dc2626",
+                }}
+              >
+                ${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Resultado acumulado hasta el período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-red">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="vencidos" />
+              </div>
+              <div className="directiva-mobile-card-title">Cartera Vencida</div>
+              <div className="directiva-mobile-card-value">{pagosVencidos}</div>
+              <div className="directiva-mobile-card-subtitle">
+                Pagos pendientes de recuperación.
+              </div>
               <div className="directiva-mobile-arrow">→</div>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -2147,7 +2489,7 @@ if (rol === "DIRECTIVA") {
           <div className="directiva-mobile-grid">
             <button type="button" className="directiva-mobile-card directiva-card-orange" onClick={() => router.push("/aprobaciones-directiva")}>
               <div className="directiva-mobile-icon"><IconoAdminMovil tipo="aprobadas" /></div>
-              <div className="directiva-mobile-card-title">Aprobaciones</div>
+              <div className="directiva-mobile-card-title">Aprobaciones de gastos</div>
               <div className="directiva-mobile-card-value">Revisar</div>
               <div className="directiva-mobile-card-subtitle">Revisa las solicitudes pendientes.</div>
               <div className="directiva-mobile-arrow">→</div>
@@ -2176,16 +2518,6 @@ if (rol === "DIRECTIVA") {
               <div className="directiva-mobile-card-subtitle">Participa y revisa las votaciones.</div>
               <div className="directiva-mobile-arrow">→</div>
             </button>
-          </div>
-        </div>
-
-        <div className="directiva-mobile-resumen">
-          <div className="directiva-mobile-resumen-title"><span>📊</span> Resumen de gestión</div>
-          <div className="directiva-mobile-resumen-grid">
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">💰</span><strong>${saldo.toFixed(2)}</strong><small>Saldo actual</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">📋</span><strong>{solicitudesPendientes}</strong><small>Solicitudes pendientes</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">🔴</span><strong>{pagosVencidos}</strong><small>Cartera vencida</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">💰</span><strong>${limiteGastoAdmin.toFixed(2)}</strong><small>Límite administrador</small></div>
           </div>
         </div>
       </div>
@@ -2239,19 +2571,146 @@ if (rol === "DIRECTIVA") {
 
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>💰</span> Resumen financiero</div>
+
+            <div
+              style={{
+                marginBottom: 12,
+                color: "#475569",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Período: {formatoMesTransparencia(
+                transparenciaSeleccionada.mes
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 14,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (indice > 0) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice - 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "8px 11px",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
+              >
+                ←
+              </button>
+
+              <select
+                value={mesTransparencia}
+                onChange={(e) =>
+                  setMesTransparencia(e.target.value)
+                }
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "9px 10px",
+                  background: "#fff",
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                {mesesTransparencia.length === 0 ? (
+                  <option value="">Sin información</option>
+                ) : (
+                  mesesTransparencia.map((mes) => (
+                    <option key={mes} value={mes}>
+                      {formatoMesTransparencia(mes)}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (
+                    indice >= 0 &&
+                    indice < mesesTransparencia.length - 1
+                  ) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice + 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "8px 11px",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
+              >
+                →
+              </button>
+            </div>
+
             <div className="admin-mobile-grid">
               <div className="admin-mobile-card admin-card-green">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado</div><div className="admin-mobile-card-value">${recaudado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.ingresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos del período seleccionado.</div>
               </div>
               <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos</div><div className="admin-mobile-card-value">${gastos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos administrativos</div><div className="admin-mobile-arrow">→</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
               </button>
               <div className="admin-mobile-card admin-card-blue">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo</div><div className="admin-mobile-card-value">${saldo.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Balance actual</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Acumulado hasta el período seleccionado.</div>
               </div>
-              <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/pagos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="validar" /></div><div className="admin-mobile-card-title">Por validar</div><div className="admin-mobile-card-value">{pagosValidar}</div><div className="admin-mobile-card-subtitle">Comprobantes pendientes</div><div className="admin-mobile-arrow">→</div>
-              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                color: "#64748b",
+                fontSize: 12,
+              }}
+            >
+              Resultado del mes:{" "}
+              <strong
+                style={{
+                  color:
+                    transparenciaSeleccionada.resultado >= 0
+                      ? "#16a34a"
+                      : "#dc2626",
+                }}
+              >
+                ${transparenciaSeleccionada.resultado.toFixed(2)}
+              </strong>
             </div>
           </div>
 
@@ -2294,6 +2753,19 @@ if (rol === "DIRECTIVA") {
               </button>
               <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/solicitudes-aprobadas")}>
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="aprobadas" /></div><div className="admin-mobile-card-title">Solicitudes Aprobadas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Consulta las solicitudes ya aprobadas.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-mobile-section">
+            <div className="admin-mobile-section-title"><span>🏛️</span> Control financiero</div>
+            <div className="admin-mobile-grid">
+              <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/pagos")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="validar" /></div>
+                <div className="admin-mobile-card-title">Pagos por validar</div>
+                <div className="admin-mobile-card-value">{pagosValidar}</div>
+                <div className="admin-mobile-card-subtitle">Comprobantes pendientes de revisión.</div>
+                <div className="admin-mobile-arrow">→</div>
               </button>
             </div>
           </div>
@@ -2450,14 +2922,151 @@ if (rol === "DIRECTIVA") {
             marginBottom: 30,
           }}
         >
-
-          <h2
+          <div
             style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 20,
+              flexWrap: "wrap",
               marginBottom: 20,
             }}
           >
-            Resumen Financiero
-          </h2>
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  marginBottom: 6,
+                }}
+              >
+                Resumen Financiero
+              </h2>
+              <div
+                style={{
+                  color: "#64748b",
+                  fontSize: 14,
+                }}
+              >
+                Resumen del período seleccionado de la urbanización.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (indice > 0) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice - 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  cursor: "pointer",
+                  opacity:
+                    !mesTransparencia ||
+                    mesesTransparencia.indexOf(mesTransparencia) <= 0
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                ←
+              </button>
+
+              <select
+                value={mesTransparencia}
+                onChange={(e) =>
+                  setMesTransparencia(e.target.value)
+                }
+                style={{
+                  minWidth: 190,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: "#fff",
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                {mesesTransparencia.length === 0 ? (
+                  <option value="">Sin información</option>
+                ) : (
+                  mesesTransparencia.map((mes) => (
+                    <option key={mes} value={mes}>
+                      {formatoMesTransparencia(mes)}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (
+                    indice >= 0 &&
+                    indice < mesesTransparencia.length - 1
+                  ) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice + 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  cursor: "pointer",
+                  opacity:
+                    !mesTransparencia ||
+                    mesesTransparencia.indexOf(mesTransparencia) ===
+                      mesesTransparencia.length - 1
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginBottom: 16,
+              color: "#475569",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            Período: {formatoMesTransparencia(
+              transparenciaSeleccionada.mes
+            )}
+          </div>
 
           <div
             style={{
@@ -2467,10 +3076,15 @@ if (rol === "DIRECTIVA") {
               gap: 20,
             }}
           >
+            <CardPremium
+              titulo="💰 Recaudado del mes"
+              valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
+              color="#16a34a"
+            />
 
             <CardPremium
-              titulo="🧾 Gastos"
-              valor={`$${gastos.toFixed(2)}`}
+              titulo="🧾 Gastos del mes"
+              valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
               color="#dc2626"
               onClick={() =>
                 router.push(
@@ -2480,33 +3094,20 @@ if (rol === "DIRECTIVA") {
             />
 
             <CardPremium
-              titulo="📊 Saldo"
-              valor={`$${saldo.toFixed(2)}`}
+              titulo="📊 Saldo acumulado"
+              valor={`$${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}`}
               color="#2563eb"
             />
 
             <CardPremium
-              titulo="⏳ Por validar"
-              valor={pagosValidar}
-              color="#7c3aed"
-              onClick={() =>
-                router.push(
-                  "/pagos"
-                )
+              titulo="📊 Resultado del mes"
+              valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
+              color={
+                transparenciaSeleccionada.resultado >= 0
+                  ? "#16a34a"
+                  : "#dc2626"
               }
             />
-
-            <CardPremium
-              titulo="📊 Informe de ingresos"
-              valor="Pagados y pendientes"
-              color="#16a34a"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
-            />
-
           </div>
 
         </div>
@@ -2995,6 +3596,7 @@ function IconoAdminMovil({
     </svg>
   );
 }
+
 // 🎨 ICONOS MODERNOS PARA EL DASHBOARD MÓVIL
 
 function IconoMovil({

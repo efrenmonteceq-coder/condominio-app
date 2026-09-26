@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Home() {
-  // FORMULARIO
+  useEffect(() => { window.location.replace("/login"); }, []);
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("");
   const [direccion, setDireccion] = useState("");

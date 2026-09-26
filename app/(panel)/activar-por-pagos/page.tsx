@@ -197,6 +197,10 @@ const [telefono,
     setFoto] =
     useState<any>(null);
 
+  const [fotoCedula,
+    setFotoCedula] =
+    useState<any>(null);
+
   // 🔥 ROL
 
   const rol =
@@ -347,6 +351,7 @@ const [telefono,
       !nombre ||
       !especialidad ||
       !foto ||
+      !fotoCedula ||
       !cedula ||
       !direccion
     ) {
@@ -359,23 +364,26 @@ const [telefono,
 
     }
 
-    const nombreArchivo =
-      `${Date.now()}-${foto.name}`;
+    const sello = Date.now();
+    const nombreArchivoFoto =
+      `foto-${sello}-${foto.name}`;
+    const nombreArchivoCedula =
+      `cedula-${sello}-${fotoCedula.name}`;
 
     const {
-      error: errorUpload
+      error: errorUploadFoto
     } = await supabase
       .storage
       .from("tecnicos")
       .upload(
-        nombreArchivo,
+        nombreArchivoFoto,
         foto
       );
 
-    if (errorUpload) {
+    if (errorUploadFoto) {
 
       alert(
-        "Error subiendo imagen"
+        "Error subiendo foto del técnico"
       );
 
       return;
@@ -383,16 +391,48 @@ const [telefono,
     }
 
     const {
-      data: urlData
+      error: errorUploadCedula
+    } = await supabase
+      .storage
+      .from("tecnicos")
+      .upload(
+        nombreArchivoCedula,
+        fotoCedula
+      );
+
+    if (errorUploadCedula) {
+
+      alert(
+        "Error subiendo foto de cédula"
+      );
+
+      return;
+
+    }
+
+    const {
+      data: urlFotoData
     } = supabase
       .storage
       .from("tecnicos")
       .getPublicUrl(
-        nombreArchivo
+        nombreArchivoFoto
+      );
+
+    const {
+      data: urlCedulaData
+    } = supabase
+      .storage
+      .from("tecnicos")
+      .getPublicUrl(
+        nombreArchivoCedula
       );
 
     const foto_url =
-      urlData.publicUrl;
+      urlFotoData.publicUrl;
+
+    const foto_cedula_url =
+      urlCedulaData.publicUrl;
 
 
        const {
@@ -438,6 +478,8 @@ especialidad_secundaria_2:
         direccion,
 
         foto_url,
+
+        foto_cedula_url,
 
         activo: false,
 
@@ -645,6 +687,8 @@ if (!response.ok) {
     setDireccion("");
 
     setFoto(null);
+
+    setFotoCedula(null);
 
   };
 
@@ -923,7 +967,7 @@ if (!response.ok) {
 
         </div>
 
-        {/* 🔥 FOTO */}
+        {/* 🔥 FOTO DEL TÉCNICO */}
 
         <div
           style={{
@@ -933,27 +977,137 @@ if (!response.ok) {
 
           <label
             style={{
-              display:
-                "block",
+              display: "block",
               marginBottom: 10,
-              fontWeight:
-                "bold",
-              color:
-                "#111827",
+              fontWeight: "bold",
+              color: "#111827",
             }}
           >
-            📸 Foto del técnico
+            📸 Foto del técnico <span style={{ color: "#6b7280", fontWeight: "normal" }}>(visible en el directorio público)</span>
           </label>
 
           <input
+            id="foto-tecnico-input"
             type="file"
             accept="image/*"
+            style={{ display: "none" }}
             onChange={(e) =>
-              setFoto(
+              setFoto(e.target.files?.[0])
+            }
+          />
+
+          <label
+            htmlFor="foto-tecnico-input"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              background: "linear-gradient(135deg,#2563eb,#1d4ed8)",
+              color: "#fff",
+              padding: "12px 18px",
+              borderRadius: 14,
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 14,
+              boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
+            }}
+          >
+            📷 Seleccionar foto del técnico
+          </label>
+
+          {foto && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                color: "#4b5563",
+              }}
+            >
+              📎 {foto.name}
+            </div>
+          )}
+
+        </div>
+
+        {/* 🔥 CÉDULA DE IDENTIDAD */}
+
+        <div
+          style={{
+            marginTop: 18,
+          }}
+        >
+
+          <label
+            style={{
+              display: "block",
+              marginBottom: 10,
+              fontWeight: "bold",
+              color: "#111827",
+            }}
+          >
+            🪪 Foto de cédula del técnico <span style={{ color: "#6b7280", fontWeight: "normal" }}>(verificación administrativa)</span>
+          </label>
+
+          <input
+            id="cedula-tecnico-input"
+            type="file"
+            accept="image/*"
+            style={{
+              display: "none",
+            }}
+            onChange={(e) =>
+              setFotoCedula(
                 e.target.files?.[0]
               )
             }
           />
+
+          <label
+            htmlFor="cedula-tecnico-input"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              background:
+                "linear-gradient(135deg,#7c3aed,#6d28d9)",
+              color: "#fff",
+              padding: "12px 18px",
+              borderRadius: 14,
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 14,
+              boxShadow:
+                "0 8px 18px rgba(124,58,237,0.22)",
+            }}
+          >
+            📷 Seleccionar foto de cédula
+          </label>
+
+          {fotoCedula && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                color: "#4b5563",
+              }}
+            >
+              📎 {fotoCedula.name}
+            </div>
+          )}
+
+          <p
+            style={{
+              marginTop: 10,
+              marginBottom: 0,
+              fontSize: 12,
+              color: "#6b7280",
+              lineHeight: 1.5,
+            }}
+          >
+            La foto del técnico se utilizará en el directorio público. La imagen de la cédula se utilizará únicamente para verificar la identidad del profesional y no se mostrará en el directorio.
+          </p>
 
         </div>
 
@@ -1123,21 +1277,38 @@ if (!response.ok) {
                 }}
               >
 
-                <img
-                  src={t.foto_url}
-                  alt={t.nombre}
-                  style={{
-                    width: 90,
-                    height: 90,
-                    borderRadius:
-                      "50%",
-                    objectFit:
-                      "cover",
-                    border:
-                      "4px solid #fed7aa",
-                    marginBottom: 16,
-                  }}
-                />
+                {t.foto_url ? (
+                  <img
+                    src={t.foto_url}
+                    alt={t.nombre}
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      objectFit: "cover",
+                      border: "4px solid #fed7aa",
+                      marginBottom: 16,
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "#ffedd5",
+                      border: "4px solid #fed7aa",
+                      marginBottom: 16,
+                      fontSize: 36,
+                    }}
+                    title="Sin foto del técnico"
+                  >
+                    👤
+                  </div>
+                )}
 
                 <h3
                   style={{
@@ -1345,20 +1516,36 @@ if (!response.ok) {
                 }}
               >
 
-                <img
-                  src={t.foto_url}
-                  alt={t.nombre}
-                  style={{
-                    width: 90,
-                    height: 90,
-                    borderRadius:
-                      "50%",
-                    objectFit:
-                      "cover",
-                    border:
-                      "4px solid #dbeafe",
-                  }}
-                />
+                {t.foto_url ? (
+                  <img
+                    src={t.foto_url}
+                    alt={t.nombre}
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      objectFit: "cover",
+                      border: "4px solid #bfdbfe",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "#dbeafe",
+                      border: "4px solid #bfdbfe",
+                      fontSize: 36,
+                    }}
+                    title="Sin foto del técnico"
+                  >
+                    👤
+                  </div>
+                )}
 
                 {i === 0 && (
 

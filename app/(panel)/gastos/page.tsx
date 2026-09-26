@@ -425,12 +425,56 @@ async function cargarMontoMaximo() {
 
         }
 
+        // 🔒 VALIDAR DUPLICIDAD DE LA SOLICITUD
+        // Cuando el gasto proviene de una solicitud aprobada, la relación
+        // queda guardada por ID y no se permite registrar otra factura
+        // para la misma solicitud.
+        if (solicitudId) {
+
+          const {
+            data: gastoExistente,
+            error: errorGastoExistente,
+          } = await supabase
+            .from("gastos_administrativos")
+            .select("id")
+            .eq("solicitud_id", solicitudId)
+            .eq("condominio_id", usuario.condominio_id)
+            .maybeSingle();
+
+          if (errorGastoExistente) {
+            console.error(
+              "❌ Error verificando la solicitud:",
+              errorGastoExistente
+            );
+
+            alert(
+              "No se pudo verificar si esta solicitud ya tiene una factura registrada."
+            );
+
+            return;
+          }
+
+          if (gastoExistente) {
+            alert(
+              "Esta solicitud ya tiene una factura registrada."
+            );
+
+            return;
+          }
+
+        }
+
         // 🔥 INSERT
 
         const payload = {
 
           condominio_id:
             usuario.condominio_id,
+
+          // 🔗 Relación directa con la solicitud aprobada.
+          // En gastos normales (sin solicitud), queda null.
+          solicitud_id:
+            solicitudId || null,
 
           categoria,
 
@@ -489,26 +533,69 @@ estado_aprobacion:
 
         };
 
-        const { error } =
-          await supabase
-            .from(
-              "gastos_administrativos"
-            )
-            .insert([
-              payload,
-            ]);
+        const {
+          data: gastoInsertado,
+          error,
+        } = await supabase
+          .from(
+            "gastos_administrativos"
+          )
+          .insert([
+            payload,
+          ])
+          .select("id")
+          .single();
 
-        if (error) {
+        if (error || !gastoInsertado) {
 
           console.error(
             error
           );
 
           alert(
-            error.message
+            error?.message || "No se pudo registrar el gasto."
           );
 
           return;
+
+        }
+
+        // 🔗 Si el gasto nació desde una solicitud aprobada, la marcamos
+        // como ejecutada únicamente después de haber registrado el gasto.
+        if (solicitudId) {
+
+          const { error: errorSolicitud } =
+            await supabase
+              .from("solicitudes_gastos")
+              .update({
+                ejecutado: true,
+              })
+              .eq("id", solicitudId)
+              .eq("condominio_id", usuario.condominio_id)
+              .eq("estado", "APROBADO");
+
+          if (errorSolicitud) {
+
+            console.error(
+              "❌ Error marcando la solicitud como ejecutada:",
+              errorSolicitud
+            );
+
+            // Intentamos deshacer el gasto recién creado para no dejar
+            // una factura registrada sin su solicitud cerrada.
+            await supabase
+              .from("gastos_administrativos")
+              .delete()
+              .eq("id", gastoInsertado.id)
+              .eq("condominio_id", usuario.condominio_id);
+
+            alert(
+              "No se pudo cerrar la solicitud aprobada. El gasto no quedó registrado."
+            );
+
+            return;
+
+          }
 
         }
 

@@ -151,37 +151,37 @@ export default function PanelTecnico() {
               <div style={{ marginBottom: 18 }}>
                 <h2 style={{ margin: "0 0 10px", fontSize: 18, color: "#0f172a" }}>Acciones principales</h2>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>
-                  <Link href="/panel-tecnico/servicios" style={mobileCard}>
-                    <div style={mobileIconBox}><Icon tipo="servicios" /></div>
+                  <Link href="/panel-tecnico/servicios" style={{ ...mobileCard, background: "#dcfce7", border: "1px solid #86efac", color: "#166534" }}>
+                    <div style={{ ...mobileIconBox, background: "#bbf7d0", color: "#15803d" }}><Icon tipo="servicios" /></div>
                     <div style={{ marginTop: 10, fontWeight: 800 }}>Mis Servicios</div>
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Consulta y gestiona tus servicios</div>
+                    <div style={{ fontSize: 12, color: "#15803d", marginTop: 4 }}>Consulta y gestiona tus servicios</div>
                   </Link>
-                  <Link href="/panel-tecnico/perfil" style={mobileCard}>
-                    <div style={mobileIconBox}><Icon tipo="perfil" /></div>
+                  <Link href="/panel-tecnico/perfil" style={{ ...mobileCard, background: "#dbeafe", border: "1px solid #93c5fd", color: "#1e3a8a" }}>
+                    <div style={{ ...mobileIconBox, background: "#bfdbfe", color: "#2563eb" }}><Icon tipo="perfil" /></div>
                     <div style={{ marginTop: 10, fontWeight: 800 }}>Mi Perfil</div>
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Datos del profesional</div>
+                    <div style={{ fontSize: 12, color: "#1d4ed8", marginTop: 4 }}>Datos del profesional</div>
                   </Link>
-                  <Link href="/panel-tecnico/pagos" style={mobileCard}>
-                    <div style={mobileIconBox}><Icon tipo="pago" /></div>
+                  <Link href="/panel-tecnico/pagos" style={{ ...mobileCard, background: "#fef3c7", border: "1px solid #fcd34d", color: "#92400e" }}>
+                    <div style={{ ...mobileIconBox, background: "#fde68a", color: "#b45309" }}><Icon tipo="pago" /></div>
                     <div style={{ marginTop: 10, fontWeight: 800 }}>Pagos y Comprobantes</div>
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Estado de tu suscripción</div>
+                    <div style={{ fontSize: 12, color: "#b45309", marginTop: 4 }}>Estado de tu suscripción</div>
                   </Link>
                 </div>
               </div>
 
-              <div style={{ ...mobileCard, marginBottom: 14 }}>
-                <h2 style={{ margin: 0, fontSize: 18 }}>Estado de tu cuenta</h2>
+              <div style={{ ...mobileCard, marginBottom: 14, background: "#f3e8ff", border: "1px solid #d8b4fe", color: "#581c87" }}>
+                <h2 style={{ margin: 0, fontSize: 18, color: "#581c87" }}>Estado de tu cuenta</h2>
                 <div style={{
                   display: "inline-block", marginTop: 10, padding: "6px 10px",
                   borderRadius: 999, background: "#dcfce7", color: "#166534",
                   fontSize: 12, fontWeight: 800,
                 }}>{tecnico.estado || "ACTIVO"}</div>
-                <p style={{ color: "#64748b", fontSize: 13, margin: "9px 0 0" }}>
+                <p style={{ color: "#6b21a8", fontSize: 13, margin: "9px 0 0" }}>
                   Tu cuenta de técnico está activa y puedes gestionar tus servicios.
                 </p>
               </div>
 
-              <div style={mobileCard}>
+              <div style={{ ...mobileCard, background: "#f0fdfa", border: "1px solid #99f6e4" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                   <div>
                     <h2 style={{ margin: 0, fontSize: 18 }}>Servicios recientes</h2>

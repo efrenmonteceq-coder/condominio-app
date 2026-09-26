@@ -23,6 +23,13 @@ export default function SolicitudesAprobadas() {
     setMostrarHistorial] =
     useState(false);
 
+  // 🧾 GASTOS YA REGISTRADOS
+  // Se consulta el módulo de gastos para reconocer también
+  // facturas que fueron registradas antes de este control visual.
+  const [gastosRegistrados,
+    setGastosRegistrados] =
+    useState<any[]>([]);
+
   useEffect(() => {
 
     if (
@@ -53,10 +60,6 @@ export default function SolicitudesAprobadas() {
         "estado",
         "APROBADO"
       )
-      .eq(
-        "ejecutado",
-        false
-      )
       .order(
         "fecha_aprobacion",
         {
@@ -78,14 +81,211 @@ export default function SolicitudesAprobadas() {
       data || []
     );
 
+    // 🧾 Cargar los gastos registrados para reconocer
+    // también solicitudes antiguas cuya factura ya fue ingresada.
+    const {
+      data: gastosData,
+      error: errorGastos,
+    } = await supabase
+      .from("gastos_administrativos")
+      .select("categoria, proveedor, descripcion, subtotal, total, valor, numero_factura, fecha_gasto, solicitud_id")
+      .eq("condominio_id", usuario?.condominio_id);
+
+    if (errorGastos) {
+      console.error(
+        "❌ Error cargando gastos registrados:",
+        errorGastos
+      );
+      setGastosRegistrados([]);
+    } else {
+      const gastosEncontrados = gastosData || [];
+
+      setGastosRegistrados(
+        gastosEncontrados
+      );
+
+      // 🔄 Regulariza solicitudes antiguas que ya tienen un gasto registrado.
+      // Antes de existir este control, esas solicitudes podían permanecer con
+      // ejecutado=false aunque la factura ya hubiese sido ingresada.
+      const solicitudesYaRegistradas = (data || []).filter((solicitud) =>
+        solicitud?.ejecutado !== true &&
+        facturaRegistradaConGastos(
+          solicitud,
+          gastosEncontrados
+        )
+      );
+
+      if (solicitudesYaRegistradas.length > 0) {
+        for (const solicitudRegistrada of solicitudesYaRegistradas) {
+          const { error: errorActualizacion } = await supabase
+            .from("solicitudes_gastos")
+            .update({ ejecutado: true })
+            .eq("id", solicitudRegistrada.id)
+            .eq("condominio_id", usuario?.condominio_id);
+
+          if (errorActualizacion) {
+            console.error(
+              "❌ No se pudo actualizar ejecutado de la solicitud:",
+              solicitudRegistrada.id,
+              errorActualizacion
+            );
+          }
+        }
+
+        setSolicitudes(
+          (data || []).map((solicitud) =>
+            solicitudesYaRegistradas.some((item) => item.id === solicitud.id)
+              ? { ...solicitud, ejecutado: true }
+              : solicitud
+          )
+        );
+      }
+    }
+
+  }
+
+  function normalizarTexto(
+    valor: any
+  ) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  function coincideTexto(
+    valorA: any,
+    valorB: any
+  ) {
+    const a = normalizarTexto(valorA);
+    const b = normalizarTexto(valorB);
+
+    if (!a || !b) {
+      return false;
+    }
+
+    return (
+      a === b ||
+      a.includes(b) ||
+      b.includes(a)
+    );
+  }
+
+  function mismoValorAprobado(
+    solicitud: any,
+    gasto: any
+  ) {
+    const valorAprobado = Number(
+      solicitud?.valor_solicitado || 0
+    );
+
+    if (!Number.isFinite(valorAprobado) || valorAprobado <= 0) {
+      return false;
+    }
+
+    const subtotal = Number(gasto?.subtotal || 0);
+    const total = Number(gasto?.total || 0);
+    const valor = Number(gasto?.valor || 0);
+
+    const valores = [subtotal, total, valor].filter((v) =>
+      Number.isFinite(v) && v > 0
+    );
+
+    return valores.some((v) =>
+      Math.abs(v - valorAprobado) < 0.01 ||
+      Math.abs(v - valorAprobado * 1.15) < 0.01 ||
+      Math.abs(v - valorAprobado / 1.15) < 0.01
+    );
+  }
+
+  function facturaRegistradaConGastos(
+    solicitud: any,
+    gastosDisponibles: any[]
+  ) {
+    if (solicitud?.ejecutado === true) {
+      return true;
+    }
+
+    // ✅ Relación contable exacta. Una factura solo pertenece a esta solicitud
+    // cuando gastos_administrativos.solicitud_id coincide exactamente con
+    // solicitudes_gastos.id. No se usan montos, textos ni similitudes.
+    return gastosDisponibles.some((gasto) => {
+      const mismaSolicitud =
+        gasto?.solicitud_id != null &&
+        String(gasto.solicitud_id) === String(solicitud?.id);
+
+      if (!mismaSolicitud) {
+        return false;
+      }
+
+      // Se conserva la estructura anterior del archivo, pero estas comprobaciones
+      // ya no deciden si la factura corresponde o no a la solicitud.
+      const comprobacionLegada = mismoValorAprobado(
+        solicitud,
+        gasto
+      );
+      void comprobacionLegada;
+
+      const categoriaSolicitud = normalizarTexto(
+        solicitud?.categoria
+      );
+      const proveedorSolicitud = normalizarTexto(
+        solicitud?.proveedor_sugerido
+      );
+      const descripcionSolicitud = normalizarTexto(
+        solicitud?.descripcion
+      );
+
+      const coincideProveedor = coincideTexto(
+        proveedorSolicitud,
+        gasto?.proveedor
+      );
+      const coincideCategoria = coincideTexto(
+        categoriaSolicitud,
+        gasto?.categoria
+      );
+      const coincideDescripcion = coincideTexto(
+        descripcionSolicitud,
+        gasto?.descripcion
+      );
+
+      const coincidencias = [
+        coincideProveedor,
+        coincideCategoria,
+        coincideDescripcion,
+      ].filter(Boolean).length;
+
+      // Estas variables se mantienen para no alterar la estructura del archivo.
+      // La identidad exacta de solicitud_id es la única condición determinante.
+      return (
+        mismaSolicitud &&
+        coincidencias >= 0
+      );
+    });
+  }
+
+  function facturaRegistrada(
+    solicitud: any
+  ) {
+    return facturaRegistradaConGastos(
+      solicitud,
+      gastosRegistrados
+    );
   }
 
   function registrarFactura(
-    solicitudId: string
+    solicitud: any
   ) {
 
+    if (facturaRegistrada(solicitud)) {
+      return;
+    }
+
     router.push(
-      `/gastos?solicitud=${solicitudId}`
+      `/gastos?solicitud=${solicitud.id}`
     );
 
   }
@@ -404,31 +604,44 @@ export default function SolicitudesAprobadas() {
                 }}
               >
 
-                <button
-                  onClick={() =>
-                    registrarFactura(
-                      solicitud.id
-                    )
-                  }
-                  style={{
-                    background:
-                      "#2563eb",
-                    color:
-                      "#fff",
-                    border:
-                      "none",
-                    padding:
-                      "12px 20px",
-                    borderRadius:
-                      10,
-                    cursor:
-                      "pointer",
-                    fontWeight:
-                      "bold",
-                  }}
-                >
-                  🧾 Registrar Factura
-                </button>
+                {facturaRegistrada(solicitud) ? (
+                  <button
+                    type="button"
+                    disabled
+                    style={{
+                      background: "#16a34a",
+                      color: "#fff",
+                      border: "none",
+                      padding: "12px 20px",
+                      borderRadius: 10,
+                      cursor: "not-allowed",
+                      fontWeight: "bold",
+                      opacity: 0.95,
+                    }}
+                  >
+                    ✅ Factura registrada
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      registrarFactura(
+                        solicitud
+                      )
+                    }
+                    style={{
+                      background: "#2563eb",
+                      color: "#fff",
+                      border: "none",
+                      padding: "12px 20px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    🧾 Registrar Factura
+                  </button>
+                )}
 
               </div>
 

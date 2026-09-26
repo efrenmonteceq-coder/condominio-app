@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +22,8 @@ export default function Dashboard() {
     (usuario?.rol || "")
       .toUpperCase()
       .trim();
+
+  const dashboardCargaIniciadaRef = useRef<string | null>(null);
 
   // 🔥 KPIs
 
@@ -65,6 +67,39 @@ export default function Dashboard() {
     setSaldo] =
     useState(0);
 
+  // 💰 TRANSPARENCIA FINANCIERA - ADMIN PC
+  // Conservamos los movimientos financieros para generar cortes mensuales
+  // sobre los mismos datos que alimentan los KPIs actuales.
+  const [pagosTransparencia, setPagosTransparencia] =
+    useState<any[]>([]);
+
+  const [gastosTransparencia, setGastosTransparencia] =
+    useState<any[]>([]);
+
+  // 💰 OTROS INGRESOS · resumen financiero mensual
+  // Se mantiene separado de pagos_residentes porque corresponde a
+  // movimientos_otros_ingresos.
+  const [otrosIngresosTransparencia, setOtrosIngresosTransparencia] =
+    useState<any[]>([]);
+
+  const [mesTransparencia, setMesTransparencia] =
+    useState("");
+
+  // 💰 ADMIN MÓVIL · selector financiero independiente
+  // Evita que el selector compartido con otras vistas afecte la actualización
+  // inmediata de los bloques financieros del ADMIN en móvil.
+  const [mesTransparenciaAdminMovil, setMesTransparenciaAdminMovil] =
+    useState("");
+
+  // 💰 RESIDENTE MÓVIL · selector financiero independiente
+  // Mantiene el selector móvil del RESIDENTE separado del selector PC.
+  const [mesTransparenciaResidenteMovil, setMesTransparenciaResidenteMovil] =
+    useState("");
+
+  // 💰 DIRECTIVA MÓVIL · selector financiero independiente
+  const [mesTransparenciaDirectivaMovil, setMesTransparenciaDirectivaMovil] =
+    useState("");
+
   const [visitasHoy,
     setVisitasHoy] =
     useState(0);
@@ -97,14 +132,82 @@ const [limiteGastoAdmin,
   const [avisoUrgentePendiente, setAvisoUrgentePendiente] =
     useState<any | null>(null);
 
+  const [avisosPendientesResidente, setAvisosPendientesResidente] =
+    useState(0);
+
   // 📢 RESUMEN DE AVISOS PARA ADMIN
   const [avisosPublicadosAdmin, setAvisosPublicadosAdmin] = useState(0);
   const [lecturasPendientesAdmin, setLecturasPendientesAdmin] = useState(0);
 
+  // ⏳ CARGA COMPLETA DEL DASHBOARD
+  // Evita mostrar KPIs en cero mientras las consultas de Supabase terminan.
+  const [cargandoDashboard, setCargandoDashboard] = useState(true);
+
+  // 🏘️ CARGAR NOMBRE DE LA URBANIZACIÓN
+  // Esta consulta es independiente de la carga de KPIs.
+  // Así el encabezado puede mostrar el nombre apenas exista el condominio_id,
+  // sin esperar a que terminen viviendas, pagos, gastos, avisos, etc.
+  useEffect(() => {
+
+    if (loading) {
+      return;
+    }
+
+    if (!usuario?.condominio_id) {
+      setCargandoCondominio(false);
+      return;
+    }
+
+    let activo = true;
+
+    const cargarNombreCondominio = async () => {
+      setCargandoCondominio(true);
+
+      const {
+        data: condominioNombreData,
+        error: errorCondominioNombre,
+      } = await supabase
+        .from("condominios")
+        .select("nombre")
+        .eq("id", usuario.condominio_id)
+        .single();
+
+      if (!activo) {
+        return;
+      }
+
+      if (errorCondominioNombre) {
+        console.error(
+          "❌ Error cargando nombre de urbanización:",
+          errorCondominioNombre
+        );
+        setNombreCondominio("");
+      } else {
+        setNombreCondominio(condominioNombreData?.nombre || "");
+      }
+
+      setCargandoCondominio(false);
+    };
+
+    cargarNombreCondominio();
+
+    return () => {
+      activo = false;
+    };
+  }, [loading, usuario?.condominio_id]);
+
   // 🔥 CARGAR DATOS
+  // La carga de KPIs es independiente del nombre de la urbanización.
 
   const cargarDatos =
     async () => {
+
+      if (!usuario?.condominio_id) {
+        setCargandoDashboard(false);
+        return;
+      }
+
+      setCargandoDashboard(true);
 
       const hoy =
   new Date()
@@ -131,34 +234,6 @@ const [limiteGastoAdmin,
       setViviendas(
         viviendasData?.length || 0
       );
-
-      // 🔥 NOMBRE DE LA URBANIZACIÓN
-      // No mostramos el texto de respaldo mientras Supabase todavía carga.
-      // Así evitamos el parpadeo entre "Tu urbanización" y el nombre real.
-      setCargandoCondominio(true);
-
-      const {
-        data: condominioNombreData,
-        error: errorCondominioNombre,
-      } = await supabase
-        .from("condominios")
-        .select("nombre")
-        .eq(
-          "id",
-          usuario.condominio_id
-        )
-        .single();
-
-      if (errorCondominioNombre) {
-        console.error(
-          "❌ Error cargando nombre de urbanización:",
-          errorCondominioNombre
-        );
-      } else if (condominioNombreData?.nombre) {
-        setNombreCondominio(condominioNombreData.nombre);
-      }
-
-      setCargandoCondominio(false);
 
       // 🔥 VIVIENDA DEL RESIDENTE
       // La relación correcta es: usuarios.id → viviendas.residente_id
@@ -222,6 +297,8 @@ const [limiteGastoAdmin,
             const avisosPendientes = (avisosData || []).filter(
               (aviso) => !avisosLeidos.has(aviso.id)
             );
+
+            setAvisosPendientesResidente(avisosPendientes.length);
 
             setAvisosImportantesPendientes(
               avisosPendientes.filter(
@@ -521,6 +598,10 @@ const vencidos =
         totalIngresos
       );
 
+      setPagosTransparencia(
+        pagosData || []
+      );
+
       // 🔥 GASTOS
 
       const {
@@ -549,6 +630,37 @@ const vencidos =
       setGastos(
         totalGastos
       );
+
+      setGastosTransparencia(
+        gastosData || []
+      );
+
+      // 💰 OTROS INGRESOS
+      // Ingresos distintos de las alícuotas para el resumen financiero.
+      const {
+        data: otrosIngresosData,
+        error: errorOtrosIngresos,
+      } = await supabase
+        .from("movimientos_otros_ingresos")
+        .select(
+          "fecha_movimiento, subtotal, total, tipo_documento, estado"
+        )
+        .eq(
+          "condominio_id",
+          usuario.condominio_id
+        );
+
+      if (errorOtrosIngresos) {
+        console.error(
+          "❌ Error cargando otros ingresos para el resumen financiero:",
+          errorOtrosIngresos
+        );
+        setOtrosIngresosTransparencia([]);
+      } else {
+        setOtrosIngresosTransparencia(
+          otrosIngresosData || []
+        );
+      }
 
       // ==========================================
 // 🔥 DATOS DIRECTIVA
@@ -622,29 +734,390 @@ if (rol === "DIRECTIVA") {
         totalGastos
       );
 
+      setCargandoDashboard(false);
+
     };
 
   // 🔥 INIT
+  // Esperamos explícitamente a que termine la carga de autenticación
+  // y a que el usuario tenga su condominio_id antes de consultar Supabase.
+  // La dependencia del condominio_id también cubre el caso en que useAuth
+  // complete ese dato después de la primera renderización.
 
   useEffect(() => {
 
-  if (!usuario) {
-    return;
-  }
+    if (loading) {
+      return;
+    }
 
-  if (rol === "TECNICO") {
+    if (!usuario?.condominio_id) {
+      return;
+    }
 
-    router.replace(
-      "/panel-tecnico"
+    if (rol === "TECNICO") {
+
+      router.replace(
+        "/panel-tecnico"
+      );
+
+      return;
+    }
+
+    const claveCarga = `${usuario.id || "usuario"}:${usuario.condominio_id}`;
+
+    if (dashboardCargaIniciadaRef.current === claveCarga) {
+      return;
+    }
+
+    dashboardCargaIniciadaRef.current = claveCarga;
+    cargarDatos();
+
+  }, [loading, usuario?.condominio_id, usuario?.id, rol]);
+
+  // 💰 TRANSPARENCIA FINANCIERA - CORTES MENSUALES
+  // Los meses se construyen desde el primer movimiento financiero disponible
+  // hasta el mes actual. Así también se pueden consultar meses sin movimientos.
+  const mesesTransparencia = useMemo(() => {
+    const meses = new Set<string>();
+
+    pagosTransparencia.forEach((pago) => {
+      if (pago.fecha_pago && pago.estado === "PAGADO") {
+        meses.add(String(pago.fecha_pago).slice(0, 7));
+      }
+    });
+
+    gastosTransparencia.forEach((gasto) => {
+      if (gasto.fecha_gasto) {
+        meses.add(String(gasto.fecha_gasto).slice(0, 7));
+      }
+    });
+
+    otrosIngresosTransparencia.forEach((ingreso) => {
+      const estado = String(
+        ingreso.estado || ""
+      ).toUpperCase();
+
+      if (
+        ingreso.fecha_movimiento &&
+        estado !== "ANULADO"
+      ) {
+        meses.add(
+          String(ingreso.fecha_movimiento).slice(0, 7)
+        );
+      }
+    });
+
+    const mesesOrdenados = Array.from(meses).sort();
+
+    if (mesesOrdenados.length === 0) {
+      return [];
+    }
+
+    const inicio = new Date(`${mesesOrdenados[0]}-01T00:00:00`);
+    const hoy = new Date();
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const resultado: string[] = [];
+
+    let cursor = new Date(
+      inicio.getFullYear(),
+      inicio.getMonth(),
+      1
     );
 
-    return;
-  }
+    while (cursor <= fin) {
+      resultado.push(
+        `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+      );
 
-  cargarDatos();
+      cursor = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth() + 1,
+        1
+      );
+    }
 
-}, [usuario, rol]);
+    return resultado;
+  }, [
+    pagosTransparencia,
+    gastosTransparencia,
+    otrosIngresosTransparencia,
+  ]);
 
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparencia("");
+      return;
+    }
+
+    setMesTransparencia((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) {
+        return mesActual;
+      }
+
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaMensual = useMemo(() => {
+    const meses = mesesTransparencia.map((mes) => {
+      const ingresosAlicuotas = pagosTransparencia.reduce(
+        (total, pago) => {
+          if (
+            pago.estado !== "PAGADO" ||
+            !pago.fecha_pago ||
+            String(pago.fecha_pago).slice(0, 7) !== mes
+          ) {
+            return total;
+          }
+
+          return total + Number(pago.valor_pagado || 0);
+        },
+        0
+      );
+
+      const otrosIngresos = otrosIngresosTransparencia.reduce(
+        (total, ingreso) => {
+          if (
+            !ingreso.fecha_movimiento ||
+            String(ingreso.fecha_movimiento).slice(0, 7) !== mes
+          ) {
+            return total;
+          }
+
+          const estado = String(
+            ingreso.estado || ""
+          ).toUpperCase();
+
+          if (estado === "ANULADO") {
+            return total;
+          }
+
+          const tipoDocumento = String(
+            ingreso.tipo_documento || ""
+          ).toUpperCase();
+
+          const valorIngreso =
+            tipoDocumento === "COMPROBANTE_INTERNO"
+              ? Number(ingreso.subtotal || 0)
+              : Number(ingreso.total || 0);
+
+          return total + valorIngreso;
+        },
+        0
+      );
+
+      const egresos = gastosTransparencia.reduce(
+        (total, gasto) => {
+          if (
+            !gasto.fecha_gasto ||
+            String(gasto.fecha_gasto).slice(0, 7) !== mes
+          ) {
+            return total;
+          }
+
+          return total + Number(gasto.total || 0);
+        },
+        0
+      );
+
+      const ingresos = ingresosAlicuotas + otrosIngresos;
+
+      return {
+        mes,
+        ingresos,
+        ingresosAlicuotas,
+        otrosIngresos,
+        egresos,
+        resultado: ingresos - egresos,
+      };
+    });
+
+    let acumulado = 0;
+
+    return meses.map((item) => {
+      acumulado += item.resultado;
+
+      return {
+        ...item,
+        saldoAcumulado: acumulado,
+      };
+    });
+  }, [
+    mesesTransparencia,
+    pagosTransparencia,
+    gastosTransparencia,
+    otrosIngresosTransparencia,
+  ]);
+
+  const transparenciaSeleccionada =
+    transparenciaMensual.find(
+      (item) => item.mes === mesTransparencia
+    ) || {
+      mes: mesTransparencia,
+      ingresos: 0,
+      ingresosAlicuotas: 0,
+      otrosIngresos: 0,
+      egresos: 0,
+      resultado: 0,
+      saldoAcumulado: 0,
+    };
+
+  // 👤 RESIDENTE PC · resumen personal inmediato
+  // Se construye únicamente con la información del residente autenticado.
+  const resumenPersonalResidente = useMemo(() => {
+    if (rol !== "RESIDENTE") {
+      return {
+        saldoPendiente: 0,
+        proximaAlicuota: null as any,
+        pagosPorValidar: 0,
+      };
+    }
+
+    const pagosPersonales = pagosTransparencia.filter(
+      (pago) =>
+        pago.residente_id === usuario?.id &&
+        String(pago.estado || "").toUpperCase() !== "ANULADO"
+    );
+
+    const saldoPendiente = pagosPersonales.reduce(
+      (total, pago) =>
+        total + Math.max(Number(pago.saldo_pendiente || 0), 0),
+      0
+    );
+
+    const pagosPorValidar = pagosPersonales.filter(
+      (pago) => String(pago.estado || "").toUpperCase() === "POR_VALIDAR"
+    ).length;
+
+    const alicuotasPendientes = pagosPersonales
+      .filter(
+        (pago) =>
+          String(pago.tipo_pago || "").toUpperCase() === "ALICUOTA" &&
+          Number(pago.saldo_pendiente || 0) > 0
+      )
+      .sort((a, b) => {
+        const fechaA = a.fecha_vencimiento
+          ? new Date(String(a.fecha_vencimiento)).getTime()
+          : Number.POSITIVE_INFINITY;
+        const fechaB = b.fecha_vencimiento
+          ? new Date(String(b.fecha_vencimiento)).getTime()
+          : Number.POSITIVE_INFINITY;
+
+        if (fechaA !== fechaB) {
+          return fechaA - fechaB;
+        }
+
+        return String(a.periodo || "").localeCompare(
+          String(b.periodo || "")
+        );
+      });
+
+    return {
+      saldoPendiente,
+      proximaAlicuota: alicuotasPendientes[0] || null,
+      pagosPorValidar,
+    };
+  }, [rol, pagosTransparencia, usuario?.id]);
+
+  // 💰 ADMIN MÓVIL · sincronización inicial del período
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparenciaAdminMovil("");
+      return;
+    }
+
+    setMesTransparenciaAdminMovil((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) {
+        return mesActual;
+      }
+
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaSeleccionadaAdminMovil = useMemo(() => {
+    return (
+      transparenciaMensual.find(
+        (item) => item.mes === mesTransparenciaAdminMovil
+      ) || {
+        mes: mesTransparenciaAdminMovil,
+        ingresos: 0,
+        ingresosAlicuotas: 0,
+        otrosIngresos: 0,
+        egresos: 0,
+        resultado: 0,
+        saldoAcumulado: 0,
+      }
+    );
+  }, [transparenciaMensual, mesTransparenciaAdminMovil]);
+
+  // 💰 RESIDENTE MÓVIL · sincronización inicial del período
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparenciaResidenteMovil("");
+      return;
+    }
+
+    setMesTransparenciaResidenteMovil((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) {
+        return mesActual;
+      }
+
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaSeleccionadaResidenteMovil = useMemo(() => {
+    return (
+      transparenciaMensual.find(
+        (item) => item.mes === mesTransparenciaResidenteMovil
+      ) || {
+        mes: mesTransparenciaResidenteMovil,
+        ingresos: 0,
+        ingresosAlicuotas: 0,
+        otrosIngresos: 0,
+        egresos: 0,
+        resultado: 0,
+        saldoAcumulado: 0,
+      }
+    );
+  }, [transparenciaMensual, mesTransparenciaResidenteMovil]);
+
+  // 💰 DIRECTIVA MÓVIL · sincronización inicial del período
+  useEffect(() => {
+    if (mesesTransparencia.length === 0) {
+      setMesTransparenciaDirectivaMovil("");
+      return;
+    }
+    setMesTransparenciaDirectivaMovil((mesActual) => {
+      if (mesActual && mesesTransparencia.includes(mesActual)) return mesActual;
+      return mesesTransparencia[mesesTransparencia.length - 1];
+    });
+  }, [mesesTransparencia]);
+
+  const transparenciaSeleccionadaDirectivaMovil = useMemo(() => {
+    return transparenciaMensual.find((item) => item.mes === mesTransparenciaDirectivaMovil) || {
+      mes: mesTransparenciaDirectivaMovil, ingresos: 0, ingresosAlicuotas: 0, otrosIngresos: 0, egresos: 0, resultado: 0, saldoAcumulado: 0,
+    };
+  }, [transparenciaMensual, mesTransparenciaDirectivaMovil]);
+
+  const formatoMesTransparencia = (mes: string) => {
+    if (!mes) {
+      return "Sin información";
+    }
+
+    const [anio, mesNumero] = mes.split("-");
+    const fecha = new Date(
+      Number(anio),
+      Number(mesNumero) - 1,
+      1
+    );
+
+    return fecha.toLocaleDateString("es-EC", {
+      month: "long",
+      year: "numeric",
+    });
+  };
 
   // 🔒 LOADING
 
@@ -655,6 +1128,17 @@ if (rol === "DIRECTIVA") {
 
     return <p>Cargando...</p>;
 
+  }
+
+  if (cargandoDashboard) {
+    return (
+      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+        <div style={{ textAlign: "center", color: "#475569", fontSize: 16, fontWeight: 600 }}>
+          <div style={{ fontSize: 30, marginBottom: 10 }}>⏳</div>
+          Cargando información de la urbanización...
+        </div>
+      </div>
+    );
   }
 
  // 🔥 DASHBOARD RESIDENTE
@@ -775,34 +1259,160 @@ if (rol === "RESIDENTE") {
 
         <div
           style={{
+            marginBottom: 24,
+            padding: "18px 20px",
+            borderRadius: 20,
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 14,
+              flexWrap: "wrap",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 800,
+                  color: "#111827",
+                }}
+              >
+                📊 Mi situación actual
+              </div>
+              <div
+                style={{
+                  marginTop: 3,
+                  color: "#64748b",
+                  fontSize: 13,
+                }}
+              >
+                Resumen inmediato de tu estado personal.
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+              gap: 12,
+            }}
+          >
+            <IndicadorResumenResidente
+              titulo="💰 Saldo pendiente"
+              valor={`$${resumenPersonalResidente.saldoPendiente.toFixed(2)}`}
+              detalle={
+                resumenPersonalResidente.saldoPendiente > 0
+                  ? "Total que tienes pendiente de pago."
+                  : "No tienes saldo pendiente."
+              }
+              color="#16a34a"
+            />
+
+            <IndicadorResumenResidente
+              titulo="📅 Próxima alícuota"
+              valor={
+                resumenPersonalResidente.proximaAlicuota
+                  ? `$${Number(resumenPersonalResidente.proximaAlicuota.saldo_pendiente || 0).toFixed(2)}`
+                  : "Al día"
+              }
+              detalle={
+                resumenPersonalResidente.proximaAlicuota
+                  ? `Vence: ${String(resumenPersonalResidente.proximaAlicuota.fecha_vencimiento || "Sin fecha").slice(0, 10)}`
+                  : "No tienes alícuotas pendientes."
+              }
+              color="#2563eb"
+            />
+
+            <IndicadorResumenResidente
+              titulo="🧾 Pagos por validar"
+              valor={String(resumenPersonalResidente.pagosPorValidar)}
+              detalle={
+                resumenPersonalResidente.pagosPorValidar === 0
+                  ? "No tienes pagos pendientes de validación."
+                  : resumenPersonalResidente.pagosPorValidar === 1
+                    ? "Pago enviado pendiente de validación."
+                    : "Pagos enviados pendientes de validación."
+              }
+              color="#f59e0b"
+            />
+
+            <IndicadorResumenResidente
+              titulo="📢 Avisos pendientes"
+              valor={String(avisosPendientesResidente)}
+              detalle={
+                avisosPendientesResidente === 0
+                  ? "No tienes avisos pendientes."
+                  : "Avisos publicados que aún no has leído."
+              }
+              color="#dc2626"
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: "#111827",
+            }}
+          >
+            🧭 Mis servicios
+          </div>
+          <div
+            style={{
+              marginTop: 3,
+              color: "#64748b",
+              fontSize: 13,
+            }}
+          >
+            Accede a las funciones disponibles de tu cuenta.
+          </div>
+        </div>
+
+        <div
+          style={{
             display: "grid",
             gridTemplateColumns:
               "repeat(auto-fit,minmax(250px,1fr))",
             gap: 20,
           }}
         >
-          <CardPremium
+          <CardPremiumInteractiva
             titulo="💰 Estado de Cuenta"
-            valor="Ver"
             color="#16a34a"
+            detalle="Consulta tu saldo, alícuotas y movimientos."
             onClick={() =>
               router.push("/estado-cuenta")
             }
           />
 
-          <CardPremium
+          <CardPremiumInteractiva
             titulo="📄 Mis Comprobantes"
-            valor="Ver"
             color="#2563eb"
+            detalle="Consulta tus alícuotas, registra tus pagos y revisa tus comprobantes."
             onClick={() =>
               router.push("/pagos")
             }
           />
 
-          <CardPremium
+          <CardPremiumInteractiva
             titulo="📅 Mis Reservas"
-            valor="Ver"
             color="#7c3aed"
+            detalle="Consulta tus reservas y el historial de áreas comunes."
             onClick={() =>
               router.push(
                 "/reservas?solo=historial"
@@ -810,10 +1420,10 @@ if (rol === "RESIDENTE") {
             }
           />
 
-          <CardPremium
+          <CardPremiumInteractiva
             titulo="🚗 Mis Visitas"
-            valor="Ver"
             color="#f59e0b"
+            detalle="Consulta tus visitas y el historial de ingresos."
             onClick={() =>
               router.push(
                 "/visitas?solo=historial"
@@ -821,10 +1431,10 @@ if (rol === "RESIDENTE") {
             }
           />
 
-          <CardPremium
+          <CardPremiumInteractiva
             titulo="📢 Novedades"
-            valor="Ver"
             color="#dc2626"
+            detalle="Consulta avisos y novedades de la urbanización."
             onClick={() =>
               router.push(
                 "/novedades?solo=historial"
@@ -832,6 +1442,82 @@ if (rol === "RESIDENTE") {
             }
           />
         </div>
+
+        {/* TRANSPARENCIA FINANCIERA DEL RESIDENTE */}
+        <div style={{ marginTop: 30, marginBottom: 30, padding: 24, borderRadius: 24, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
+            <div>
+              <h2 style={{ margin: 0, marginBottom: 6, fontWeight: 800 }}>Transparencia Financiera de la urbanización</h2>
+              <div style={{ color: "#64748b", fontSize: 14 }}>Corte mensual de ingresos, gastos y saldo acumulado.</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice > 0) setMesTransparencia(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0 ? 0.45 : 1 }}>←</button>
+              <select value={mesTransparencia} onChange={(e) => setMesTransparencia(e.target.value)} style={{ minWidth: 190, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff", fontWeight: 600, color: "#0f172a" }}>
+                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
+              </select>
+              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparencia(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
+            </div>
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14, fontWeight: 600 }}>Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 20 }}>
+            <CardPremium
+              titulo="🏠 Ingresos por alícuotas"
+              valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
+              color="#16a34a"
+              compact
+            />
+
+            <CardPremium
+              titulo="💰 Otros ingresos"
+              valor={`$${transparenciaSeleccionada.otrosIngresos.toFixed(2)}`}
+              color="#059669"
+              compact
+            />
+
+            <CardPremium
+              titulo="💵 Ingresos totales del mes"
+              valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
+              color="#0f766e"
+              compact
+            />
+
+            <CardPremium
+              titulo="🧾 Gastos del mes"
+              valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
+              color="#dc2626"
+              compact
+            />
+
+            <CardPremium
+              titulo="📊 Resultado del mes"
+              valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
+              color={
+                transparenciaSeleccionada.resultado >= 0
+                  ? "#16a34a"
+                  : "#dc2626"
+              }
+              compact
+            />
+
+            <CardPremium
+              titulo="📘 Saldo acumulado anterior"
+              valor={`$${(
+                transparenciaSeleccionada.saldoAcumulado -
+                transparenciaSeleccionada.resultado
+              ).toFixed(2)}`}
+              color="#2563eb"
+              compact
+            />
+
+            <CardPremium
+              titulo="💼 Nuevo saldo acumulado"
+              valor={`$${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}`}
+              color="#7c3aed"
+              compact
+            />
+          </div>
+        </div>
+
       </div>
 
       {/* ==========================================
@@ -1184,41 +1870,6 @@ if (rol === "RESIDENTE") {
           </button>
 
           <button
-            className="residente-mobile-card residente-card-verde"
-            style={{ background: "linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%)", borderTop: "3px solid #10b981" }}
-            onClick={() =>
-              router.push("/gastos")
-            }
-          >
-            <div
-              className="residente-mobile-icon residente-icon-svg"
-              style={{
-                width: 58,
-                height: 58,
-                minWidth: 58,
-                borderRadius: 18,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "rgba(255,255,255,0.72)",
-                boxShadow: "0 5px 14px rgba(15,23,42,0.08)",
-              }}
-            >
-              <IconoMovil tipo="transparencia" />
-            </div>
-
-            <div className="residente-mobile-title">
-              Transparencia Financiera
-            </div>
-
-            <div className="residente-mobile-subtitle">
-              Consulta gastos y movimientos de tu urbanización.
-            </div>
-
-            <div className="residente-mobile-arrow">→</div>
-          </button>
-
-          <button
             className="residente-mobile-card residente-card-naranja"
             style={{ background: "linear-gradient(145deg, #fff7ed 0%, #fed7aa 100%)", borderTop: "3px solid #f97316" }}
             onClick={() =>
@@ -1300,6 +1951,33 @@ if (rol === "RESIDENTE") {
           </div>
         </div>
 
+          <div style={{ gridColumn: "1 / -1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 18, padding: 14 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div className="residente-mobile-title" style={{ margin: 0 }}>Transparencia Financiera</div>
+              <div className="residente-mobile-subtitle" style={{ marginTop: 4 }}>De la urbanización · corte mensual</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <button type="button" disabled={!mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparenciaResidenteMovil); if (indice > 0) setMesTransparenciaResidenteMovil(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0 ? 0.45 : 1 }}>←</button>
+              <select
+                value={mesTransparenciaResidenteMovil}
+                onChange={(e) => setMesTransparenciaResidenteMovil(e.target.value)}
+                onInput={(e) => setMesTransparenciaResidenteMovil((e.target as HTMLSelectElement).value)}
+                style={{ flex: 1, minWidth: 0, border: "1px solid #cbd5e1", borderRadius: 9, padding: "9px 10px", background: "#fff", fontWeight: 600, color: "#0f172a" }}
+              >
+                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
+              </select>
+              <button type="button" disabled={!mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparenciaResidenteMovil); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparenciaResidenteMovil(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 10 }}>Período: {formatoMesTransparencia(transparenciaSeleccionadaResidenteMovil.mes)}</div>
+            <div key={`residente-finanzas-${mesTransparenciaResidenteMovil}`} style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 9 }}>
+              <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#047857" }}>Ingresos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#065f46", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.ingresos.toFixed(2)}</div></div>
+              <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#be123c" }}>Gastos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#9f1239", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.egresos.toFixed(2)}</div></div>
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.resultado >= 0 ? "#1e3a8a" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.resultado.toFixed(2)}</div></div>
+              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#6d28d9" }}>Saldo acumulado</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.saldoAcumulado >= 0 ? "#5b21b6" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.saldoAcumulado.toFixed(2)}</div></div>
+            </div>
+          </div>
+
+
       </div>
     </>
   );
@@ -1346,31 +2024,195 @@ if (rol === "RESIDENTE") {
             </p>
           </div>
 
+          {/* ACCIONES PRINCIPALES */}
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit,minmax(250px,1fr))",
-              gap: 20,
+              marginBottom: 30,
             }}
           >
-            <CardPremium
-              titulo="🚗 Visitas"
-              valor="Gestionar"
-              color="#2563eb"
-              onClick={() =>
-                router.push("/visitas")
-              }
-            />
+            <h2
+              style={{
+                marginBottom: 20,
+              }}
+            >
+              ⚡ Acciones principales
+            </h2>
 
-            <CardPremium
-              titulo="📢 Novedades"
-              valor="Gestionar"
-              color="#dc2626"
-              onClick={() =>
-                router.push("/novedades")
-              }
-            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(250px,1fr))",
+                gap: 20,
+              }}
+            >
+              <CardPremium
+                titulo="🚗 Control de Acceso"
+                valor="Gestionar"
+                color="#2563eb"
+                onClick={() =>
+                  router.push("/visitas")
+                }
+              />
+
+              <CardPremium
+                titulo="📢 Novedades"
+                valor={novedades}
+                color="#dc2626"
+                onClick={() =>
+                  router.push("/novedades")
+                }
+              />
+
+              <CardPremium
+                titulo="🛡️ Rondas de Vigilancia"
+                valor="Gestionar"
+                color="#16a34a"
+                onClick={() =>
+                  router.push("/rondas-guardia")
+                }
+              />
+
+              <CardPremium
+                titulo="📦 Paquetería"
+                valor="Gestionar"
+                color="#f97316"
+                onClick={() =>
+                  router.push("/paqueteria")
+                }
+              />
+            </div>
+          </div>
+
+          {/* INFORMACIÓN DE LA URBANIZACIÓN */}
+          <div
+            style={{
+              marginBottom: 30,
+            }}
+          >
+            <h2
+              style={{
+                marginBottom: 20,
+              }}
+            >
+              🏘️ Información de la urbanización
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(250px,1fr))",
+                gap: 20,
+              }}
+            >
+              <CardPremium
+                titulo="🏠 Viviendas"
+                valor={viviendas}
+                color="#4f46e5"
+                onClick={() =>
+                  router.push("/viviendas")
+                }
+              />
+
+              <CardPremium
+                titulo="👥 Residentes"
+                valor={residentes}
+                color="#475569"
+                onClick={() =>
+                  router.push("/residentes")
+                }
+              />
+            </div>
+          </div>
+
+          {/* COMUNICACIÓN */}
+          <div
+            style={{
+              marginBottom: 30,
+            }}
+          >
+            <h2
+              style={{
+                marginBottom: 20,
+              }}
+            >
+              📢 Comunicación
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(250px,1fr))",
+                gap: 20,
+              }}
+            >
+              <CardPremium
+                titulo="📢 Avisos"
+                valor="Consultar"
+                color="#7c3aed"
+                onClick={() =>
+                  router.push("/avisos")
+                }
+              />
+            </div>
+          </div>
+
+          {/* RESUMEN DE HOY */}
+          <div>
+            <h2
+              style={{
+                marginBottom: 20,
+              }}
+            >
+              📊 Resumen de hoy
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(180px,1fr))",
+                gap: 20,
+              }}
+            >
+              <CardPremium
+                titulo="🚗 Visitas hoy"
+                valor={visitasHoy}
+                color="#2563eb"
+                onClick={() =>
+                  router.push("/visitas")
+                }
+              />
+
+              <CardPremium
+                titulo="📢 Novedades"
+                valor={novedades}
+                color="#dc2626"
+                onClick={() =>
+                  router.push("/novedades")
+                }
+              />
+
+              <CardPremium
+                titulo="🏠 Viviendas"
+                valor={viviendas}
+                color="#4f46e5"
+                onClick={() =>
+                  router.push("/viviendas")
+                }
+              />
+
+              <CardPremium
+                titulo="👥 Residentes"
+                valor={residentes}
+                color="#475569"
+                onClick={() =>
+                  router.push("/residentes")
+                }
+              />
+            </div>
           </div>
         </div>
 
@@ -1660,22 +2502,158 @@ if (rol === "DIRECTIVA") {
         </p>
       </div>
 
-      {/* ==================================
-          RESUMEN FINANCIERO
-          ================================== */}
+      {/* 🔥 FINANCIERO */}
 
       <div
         style={{
           marginBottom: 30,
         }}
       >
-        <h2
+        <div
           style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 20,
+            flexWrap: "wrap",
             marginBottom: 20,
           }}
         >
-          💰 Resumen Financiero
-        </h2>
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                marginBottom: 6,
+              }}
+            >
+              Resumen Financiero
+            </h2>
+            <div
+              style={{
+                color: "#64748b",
+                fontSize: 14,
+              }}
+            >
+              Resumen del período seleccionado de la urbanización.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              disabled={
+                !mesTransparencia ||
+                mesesTransparencia.indexOf(mesTransparencia) <= 0
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(
+                  mesTransparencia
+                );
+                if (indice > 0) {
+                  setMesTransparencia(
+                    mesesTransparencia[indice - 1]
+                  );
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 10,
+                padding: "9px 12px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              ←
+            </button>
+
+            <select
+              value={mesTransparencia}
+              onChange={(e) =>
+                setMesTransparencia(e.target.value)
+              }
+              style={{
+                minWidth: 190,
+                border: "1px solid #cbd5e1",
+                borderRadius: 10,
+                padding: "10px 12px",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#0f172a",
+              }}
+            >
+              {mesesTransparencia.length === 0 ? (
+                <option value="">Sin información</option>
+              ) : (
+                mesesTransparencia.map((mes) => (
+                  <option key={mes} value={mes}>
+                    {formatoMesTransparencia(mes)}
+                  </option>
+                ))
+              )}
+            </select>
+
+            <button
+              type="button"
+              disabled={
+                !mesTransparencia ||
+                mesesTransparencia.indexOf(mesTransparencia) ===
+                  mesesTransparencia.length - 1
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(
+                  mesTransparencia
+                );
+                if (
+                  indice >= 0 &&
+                  indice < mesesTransparencia.length - 1
+                ) {
+                  setMesTransparencia(
+                    mesesTransparencia[indice + 1]
+                  );
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 10,
+                padding: "9px 12px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              →
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 16,
+            color: "#475569",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          Período: {formatoMesTransparencia(
+            transparenciaSeleccionada.mes
+          )}
+        </div>
 
         <div
           style={{
@@ -1685,98 +2663,62 @@ if (rol === "DIRECTIVA") {
             gap: 20,
           }}
         >
-
           <CardPremium
-            titulo="💰 Ingresos"
-            valor={`$${recaudado.toFixed(2)}`}
+            titulo="🏠 Ingresos por alícuotas"
+            valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
             color="#16a34a"
-            onClick={() =>
-              router.push(
-                "/reportes/ingresos"
-              )
-            }
           />
 
           <CardPremium
-            titulo="🧾 Gastos"
-            valor={`$${gastos.toFixed(2)}`}
+            titulo="💰 Otros ingresos"
+            valor={`$${transparenciaSeleccionada.otrosIngresos.toFixed(2)}`}
+            color="#059669"
+          />
+
+          <CardPremium
+            titulo="💵 Ingresos totales del mes"
+            valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
+            color="#0f766e"
+          />
+
+          <CardPremium
+            titulo="🧾 Gastos del mes"
+            valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
             color="#dc2626"
             onClick={() =>
               router.push(
                 "/reportes/gastos"
               )
             }
+            interactivo={true}
           />
 
           <CardPremium
-            titulo="💵 Saldo"
-            valor={`$${saldo.toFixed(2)}`}
+            titulo="📊 Resultado del mes"
+            valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
+            color={
+              transparenciaSeleccionada.resultado >= 0
+                ? "#16a34a"
+                : "#dc2626"
+            }
+          />
+
+          <CardPremium
+            titulo="📘 Saldo acumulado anterior"
+            valor={`$${(
+              transparenciaSeleccionada.saldoAcumulado -
+              transparenciaSeleccionada.resultado
+            ).toFixed(2)}`}
             color="#2563eb"
           />
 
           <CardPremium
-            titulo="🔴 Cartera Vencida"
-            valor={pagosVencidos}
-            color="#dc2626"
-            onClick={() =>
-              router.push(
-                "/reportes/ingresos"
-              )
-            }
-          />
-
-        </div>
-      </div>
-
-      {/* ==================================
-          CONTROL FINANCIERO
-          ================================== */}
-
-      <div
-        style={{
-          marginBottom: 30,
-        }}
-      >
-        <h2
-          style={{
-            marginBottom: 20,
-          }}
-        >
-          🏛️ Control Financiero
-        </h2>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit,minmax(250px,1fr))",
-            gap: 20,
-          }}
-        >
-
-          <CardPremium
-            titulo="📋 Solicitudes Pendientes"
-            valor={solicitudesPendientes}
-            color="#f59e0b"
-            onClick={() =>
-              router.push(
-                "/aprobaciones-directiva"
-              )
-            }
-          />
-
-          <CardPremium
-            titulo="💰 Límite Administrador"
-            valor={`$${limiteGastoAdmin.toFixed(2)}`}
+            titulo="💼 Nuevo saldo acumulado"
+            valor={`$${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}`}
             color="#7c3aed"
-            onClick={() =>
-              router.push(
-                "/configuracion-financiera"
-              )
-            }
           />
-
         </div>
+
       </div>
 
       {/* ==================================
@@ -1806,7 +2748,7 @@ if (rol === "DIRECTIVA") {
         >
 
           <CardPremium
-            titulo="📋 Aprobaciones"
+            titulo="📋 Aprobaciones de gastos"
             valor="Revisar"
             color="#f59e0b"
             onClick={() =>
@@ -1814,6 +2756,7 @@ if (rol === "DIRECTIVA") {
                 "/aprobaciones-directiva"
               )
             }
+            interactivo={true}
           />
 
           <CardPremium
@@ -1825,6 +2768,7 @@ if (rol === "DIRECTIVA") {
                 "/configuracion-financiera"
               )
             }
+            interactivo={true}
           />
 
          <CardPremium
@@ -1834,6 +2778,7 @@ if (rol === "DIRECTIVA") {
   onClick={() =>
     router.push("/sesiones-acuerdos")
   }
+  interactivo={true}
 />
 
         </div>
@@ -1858,58 +2803,188 @@ if (rol === "DIRECTIVA") {
 
         <div className="directiva-mobile-section">
           <div className="directiva-mobile-section-title">💰 Resumen Financiero</div>
-          <div className="directiva-mobile-grid">
-            <button type="button" className="directiva-mobile-card directiva-card-green" onClick={() => router.push("/reportes/ingresos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div>
-              <div className="directiva-mobile-card-title">Ingresos</div>
-              <div className="directiva-mobile-card-value">${recaudado.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Recaudación registrada.</div>
-              <div className="directiva-mobile-arrow">→</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              disabled={!mesTransparenciaDirectivaMovil || mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) <= 0}
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil);
+                if (indice > 0) setMesTransparenciaDirectivaMovil(mesesTransparencia[indice - 1]);
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparenciaDirectivaMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) <= 0
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              ←
             </button>
 
-            <button type="button" className="directiva-mobile-card directiva-card-red" onClick={() => router.push("/reportes/gastos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="gastos" /></div>
-              <div className="directiva-mobile-card-title">Gastos</div>
-              <div className="directiva-mobile-card-value">${gastos.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Gastos registrados.</div>
-              <div className="directiva-mobile-arrow">→</div>
-            </button>
+            <select
+              value={mesTransparenciaDirectivaMovil}
+              onChange={(e) => setMesTransparenciaDirectivaMovil(e.target.value)}
+              onInput={(e) =>
+                setMesTransparenciaDirectivaMovil(
+                  (e.target as HTMLSelectElement).value
+                )
+              }
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "1px solid #cbd5e1",
+                borderRadius: 9,
+                padding: "9px 10px",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#0f172a",
+              }}
+            >
+              {mesesTransparencia.length === 0 ? (
+                <option value="">Sin información</option>
+              ) : (
+                mesesTransparencia.map((mes) => (
+                  <option key={mes} value={mes}>
+                    {formatoMesTransparencia(mes)}
+                  </option>
+                ))
+              )}
+            </select>
 
-            <button type="button" className="directiva-mobile-card directiva-card-blue">
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="saldo" /></div>
-              <div className="directiva-mobile-card-title">Saldo</div>
-              <div className="directiva-mobile-card-value">${saldo.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Balance actual.</div>
-            </button>
-
-            <button type="button" className="directiva-mobile-card directiva-card-red" onClick={() => router.push("/reportes/ingresos")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="vencidos" /></div>
-              <div className="directiva-mobile-card-title">Cartera Vencida</div>
-              <div className="directiva-mobile-card-value">{pagosVencidos}</div>
-              <div className="directiva-mobile-card-subtitle">Pagos pendientes de recuperación.</div>
-              <div className="directiva-mobile-arrow">→</div>
+            <button
+              type="button"
+              disabled={
+                !mesTransparenciaDirectivaMovil ||
+                mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) ===
+                  mesesTransparencia.length - 1
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil);
+                if (
+                  indice >= 0 &&
+                  indice < mesesTransparencia.length - 1
+                ) {
+                  setMesTransparenciaDirectivaMovil(mesesTransparencia[indice + 1]);
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparenciaDirectivaMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) ===
+                    mesesTransparencia.length - 1
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              →
             </button>
           </div>
-        </div>
 
-        <div className="directiva-mobile-section">
-          <div className="directiva-mobile-section-title">🏛️ Control Financiero</div>
-          <div className="directiva-mobile-grid">
-            <button type="button" className="directiva-mobile-card directiva-card-orange" onClick={() => router.push("/aprobaciones-directiva")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="solicitudes" /></div>
-              <div className="directiva-mobile-card-title">Solicitudes Pendientes</div>
-              <div className="directiva-mobile-card-value">{solicitudesPendientes}</div>
-              <div className="directiva-mobile-card-subtitle">Solicitudes de gasto por revisar.</div>
-              <div className="directiva-mobile-arrow">→</div>
-            </button>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#475569",
+              marginBottom: 10,
+            }}
+          >
+            Período: {formatoMesTransparencia(transparenciaSeleccionadaDirectivaMovil.mes)}
+          </div>
 
-            <button type="button" className="directiva-mobile-card directiva-card-purple" onClick={() => router.push("/configuracion-financiera")}>
-              <div className="directiva-mobile-icon"><IconoAdminMovil tipo="finanzas" /></div>
-              <div className="directiva-mobile-card-title">Límite Administrador</div>
-              <div className="directiva-mobile-card-value">${limiteGastoAdmin.toFixed(2)}</div>
-              <div className="directiva-mobile-card-subtitle">Límite autorizado de gasto.</div>
+          <div
+            key={`directiva-finanzas-${mesTransparenciaDirectivaMovil}`}
+            className="directiva-mobile-grid"
+          >
+            <div className="directiva-mobile-card directiva-card-green">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="recaudado" />
+              </div>
+              <div className="directiva-mobile-card-title">Recaudado del mes</div>
+              <div className="directiva-mobile-card-value">
+                ${transparenciaSeleccionadaDirectivaMovil.ingresos.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Ingresos registrados del período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-red">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="gastos" />
+              </div>
+              <div className="directiva-mobile-card-title">Gastos del mes</div>
+              <div className="directiva-mobile-card-value">
+                ${transparenciaSeleccionadaDirectivaMovil.egresos.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Gastos registrados del período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-blue">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="saldo" />
+              </div>
+              <div className="directiva-mobile-card-title">Resultado del mes</div>
+              <div
+                className="directiva-mobile-card-value"
+                style={{
+                  color:
+                    transparenciaSeleccionadaDirectivaMovil.resultado >= 0
+                      ? "#16a34a"
+                      : "#dc2626",
+                }}
+              >
+                ${transparenciaSeleccionadaDirectivaMovil.resultado.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Ingresos menos gastos del período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-purple">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="saldo" />
+              </div>
+              <div className="directiva-mobile-card-title">Saldo acumulado</div>
+              <div
+                className="directiva-mobile-card-value"
+                style={{
+                  color:
+                    transparenciaSeleccionadaDirectivaMovil.saldoAcumulado >= 0
+                      ? "#7c3aed"
+                      : "#dc2626",
+                }}
+              >
+                ${transparenciaSeleccionadaDirectivaMovil.saldoAcumulado.toFixed(2)}
+              </div>
+              <div className="directiva-mobile-card-subtitle">
+                Resultado acumulado hasta el período.
+              </div>
+            </div>
+
+            <div className="directiva-mobile-card directiva-card-red">
+              <div className="directiva-mobile-icon">
+                <IconoAdminMovil tipo="vencidos" />
+              </div>
+              <div className="directiva-mobile-card-title">Cartera Vencida</div>
+              <div className="directiva-mobile-card-value">{pagosVencidos}</div>
+              <div className="directiva-mobile-card-subtitle">
+                Pagos pendientes de recuperación.
+              </div>
               <div className="directiva-mobile-arrow">→</div>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -1918,7 +2993,7 @@ if (rol === "DIRECTIVA") {
           <div className="directiva-mobile-grid">
             <button type="button" className="directiva-mobile-card directiva-card-orange" onClick={() => router.push("/aprobaciones-directiva")}>
               <div className="directiva-mobile-icon"><IconoAdminMovil tipo="aprobadas" /></div>
-              <div className="directiva-mobile-card-title">Aprobaciones</div>
+              <div className="directiva-mobile-card-title">Aprobaciones de gastos</div>
               <div className="directiva-mobile-card-value">Revisar</div>
               <div className="directiva-mobile-card-subtitle">Revisa las solicitudes pendientes.</div>
               <div className="directiva-mobile-arrow">→</div>
@@ -1947,16 +3022,6 @@ if (rol === "DIRECTIVA") {
               <div className="directiva-mobile-card-subtitle">Participa y revisa las votaciones.</div>
               <div className="directiva-mobile-arrow">→</div>
             </button>
-          </div>
-        </div>
-
-        <div className="directiva-mobile-resumen">
-          <div className="directiva-mobile-resumen-title"><span>📊</span> Resumen de gestión</div>
-          <div className="directiva-mobile-resumen-grid">
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">💰</span><strong>${saldo.toFixed(2)}</strong><small>Saldo actual</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">📋</span><strong>{solicitudesPendientes}</strong><small>Solicitudes pendientes</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">🔴</span><strong>{pagosVencidos}</strong><small>Cartera vencida</small></div>
-            <div className="directiva-mobile-mini"><span className="directiva-mobile-mini-icon">💰</span><strong>${limiteGastoAdmin.toFixed(2)}</strong><small>Límite administrador</small></div>
           </div>
         </div>
       </div>
@@ -2010,54 +3075,190 @@ if (rol === "DIRECTIVA") {
 
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>💰</span> Resumen financiero</div>
-            <div className="admin-mobile-grid">
-              <button type="button" className="admin-mobile-card admin-card-green" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Recaudado</div><div className="admin-mobile-card-value">${recaudado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos</div><div className="admin-mobile-card-value">${gastos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos administrativos</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <div className="admin-mobile-card admin-card-blue">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo</div><div className="admin-mobile-card-value">${saldo.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Balance actual</div>
+
+            <button
+              type="button"
+              className="admin-mobile-account-card"
+              onClick={() => router.push("/estado-cuenta")}
+            >
+              <div className="admin-mobile-account-icon"><IconoAdminMovil tipo="finanzas" /></div>
+              <div className="admin-mobile-account-content">
+                <div className="admin-mobile-account-title">📄 Estado de Cuenta del Residente</div>
+                <div className="admin-mobile-account-subtitle">Consulta deuda, pagos, saldos y períodos por residente.</div>
               </div>
-              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="pendientes" /></div><div className="admin-mobile-card-title">Pendientes</div><div className="admin-mobile-card-value">{pagosPendientes}</div><div className="admin-mobile-card-subtitle">Pagos pendientes</div><div className="admin-mobile-arrow">→</div>
+              <div className="admin-mobile-account-action">Consultar&nbsp;→</div>
+            </button>
+
+            <div className="admin-mobile-subsection-title">
+              <span>📊</span> Indicadores financieros
+            </div>
+
+            <div
+              style={{
+                marginBottom: 12,
+                color: "#475569",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Período: {formatoMesTransparencia(
+                transparenciaSeleccionadaAdminMovil.mes
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 14,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  !mesTransparenciaAdminMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) <= 0
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparenciaAdminMovil
+                  );
+                  if (indice > 0) {
+                    setMesTransparenciaAdminMovil(
+                      mesesTransparencia[indice - 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "8px 11px",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
+              >
+                ←
               </button>
-              <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/ingresos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="vencidos" /></div><div className="admin-mobile-card-title">Vencidos</div><div className="admin-mobile-card-value">{pagosVencidos}</div><div className="admin-mobile-card-subtitle">Pagos vencidos</div><div className="admin-mobile-arrow">→</div>
+
+              <select
+                value={mesTransparenciaAdminMovil}
+                onChange={(e) =>
+                  setMesTransparenciaAdminMovil(e.target.value)
+                }
+                onInput={(e) =>
+                  setMesTransparenciaAdminMovil(
+                    (e.target as HTMLSelectElement).value
+                  )
+                }
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "9px 10px",
+                  background: "#fff",
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                {mesesTransparencia.length === 0 ? (
+                  <option value="">Sin información</option>
+                ) : (
+                  mesesTransparencia.map((mes) => (
+                    <option key={mes} value={mes}>
+                      {formatoMesTransparencia(mes)}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <button
+                type="button"
+                disabled={
+                  !mesTransparenciaAdminMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) ===
+                    mesesTransparencia.length - 1
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparenciaAdminMovil
+                  );
+                  if (
+                    indice >= 0 &&
+                    indice < mesesTransparencia.length - 1
+                  ) {
+                    setMesTransparenciaAdminMovil(
+                      mesesTransparencia[indice + 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "8px 11px",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
+              >
+                →
               </button>
-              <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/pagos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="validar" /></div><div className="admin-mobile-card-title">Por validar</div><div className="admin-mobile-card-value">{pagosValidar}</div><div className="admin-mobile-card-subtitle">Comprobantes pendientes</div><div className="admin-mobile-arrow">→</div>
+            </div>
+
+            <div
+              key={`admin-finanzas-${mesTransparenciaAdminMovil}`}
+              className="admin-mobile-grid"
+            >
+              <div className="admin-mobile-card admin-card-green">
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Ingresos por alícuotas</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.ingresosAlicuotas.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Recaudación efectiva por alícuotas.</div>
+              </div>
+
+              <div className="admin-mobile-card admin-card-green">
+                <div className="admin-mobile-icon">💰</div><div className="admin-mobile-card-title">Otros ingresos</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.otrosIngresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos diferentes de las alícuotas.</div>
+              </div>
+
+              <div className="admin-mobile-card admin-card-green">
+                <div className="admin-mobile-icon">💵</div><div className="admin-mobile-card-title">Ingresos totales</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.ingresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Alícuotas más otros ingresos.</div>
+              </div>
+
+              <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
               </button>
+
+              <div className="admin-mobile-card admin-card-blue">
+                <div className="admin-mobile-icon">📊</div><div className="admin-mobile-card-title">Resultado del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.resultado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos totales del mes menos gastos del mes.</div>
+              </div>
+
+              <div className="admin-mobile-card admin-card-blue">
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado anterior</div><div className="admin-mobile-card-value">${(transparenciaSeleccionadaAdminMovil.saldoAcumulado - transparenciaSeleccionadaAdminMovil.resultado).toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo existente antes del período seleccionado.</div>
+              </div>
+
+              <div className="admin-mobile-card admin-card-purple">
+                <div className="admin-mobile-icon">💼</div><div className="admin-mobile-card-title">Nuevo saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo acumulado anterior más el resultado del mes.</div>
+              </div>
             </div>
           </div>
 
           <div className="admin-mobile-section">
             <div className="admin-mobile-section-title"><span>🏘️</span> Gestión de la urbanización</div>
             <div className="admin-mobile-grid">
-              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/reportes/viviendas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Viviendas</div><div className="admin-mobile-card-value">{viviendas}</div><div className="admin-mobile-card-subtitle">Unidades registradas</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/viviendas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Gestión de Viviendas</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar viviendas.</div><div className="admin-mobile-arrow">→</div>
               </button>
-              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/reportes/residentes")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Residentes</div><div className="admin-mobile-card-value">{residentes}</div><div className="admin-mobile-card-subtitle">Personas registradas</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/residentes")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Gestión de Residentes</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar residentes.</div><div className="admin-mobile-arrow">→</div>
               </button>
-              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/reportes/guardias")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Guardias</div><div className="admin-mobile-card-value">{guardias}</div><div className="admin-mobile-card-subtitle">Personal registrado</div><div className="admin-mobile-arrow">→</div>
+              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/guardias")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Gestión de Guardias</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Ingresar, editar y administrar guardias.</div><div className="admin-mobile-arrow">→</div>
               </button>
               <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/avisos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="avisos" /></div><div className="admin-mobile-card-title">Avisos</div><div className="admin-mobile-card-value">{avisosPublicadosAdmin}</div><div className="admin-mobile-card-subtitle">Publicados y vigentes</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-violet" onClick={() => router.push("/avisos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="lecturas" /></div><div className="admin-mobile-card-title">Lecturas</div><div className="admin-mobile-card-value">{lecturasPendientesAdmin}</div><div className="admin-mobile-card-subtitle">Pendientes del último aviso</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-rose" onClick={() => router.push("/reportes/novedades")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="novedades" /></div><div className="admin-mobile-card-title">Novedades hoy</div><div className="admin-mobile-card-value">{novedades}</div><div className="admin-mobile-card-subtitle">Situaciones por atender</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/visitas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="visitas" /></div><div className="admin-mobile-card-title">Visitas hoy</div><div className="admin-mobile-card-value">{visitasHoy}</div><div className="admin-mobile-card-subtitle">Ingresos registrados</div><div className="admin-mobile-arrow">→</div>
-              </button>
-              <button type="button" className="admin-mobile-card admin-card-cyan" onClick={() => router.push("/reportes/reservas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="reservas" /></div><div className="admin-mobile-card-title">Reservas hoy</div><div className="admin-mobile-card-value">{reservasHoy}</div><div className="admin-mobile-card-subtitle">Áreas reservadas</div><div className="admin-mobile-arrow">→</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="avisos" /></div>
+                <div className="admin-mobile-card-title">Gestión de Avisos</div>
+                <div className="admin-mobile-card-value">Gestionar</div>
+                <div className="admin-mobile-card-subtitle">Publica avisos y controla sus lecturas.</div>
+                <div className="admin-mobile-arrow">→</div>
               </button>
             </div>
           </div>
@@ -2078,7 +3279,20 @@ if (rol === "DIRECTIVA") {
                 <div className="admin-mobile-icon"><IconoAdminMovil tipo="solicitudes" /></div><div className="admin-mobile-card-title">Solicitudes Gastos</div><div className="admin-mobile-card-value">Gestionar</div><div className="admin-mobile-card-subtitle">Revisa solicitudes de gastos pendientes.</div><div className="admin-mobile-arrow">→</div>
               </button>
               <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/solicitudes-aprobadas")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="aprobadas" /></div><div className="admin-mobile-card-title">Solicitudes Aprobadas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Consulta las solicitudes ya aprobadas.</div><div className="admin-mobile-arrow">→</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="aprobadas" /></div><div className="admin-mobile-card-title">Solicitudes de Gastos Aprobadas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Consulta las solicitudes ya aprobadas.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-mobile-section">
+            <div className="admin-mobile-section-title"><span>🏛️</span> Control financiero</div>
+            <div className="admin-mobile-grid">
+              <button type="button" className="admin-mobile-card admin-card-purple" onClick={() => router.push("/pagos")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="validar" /></div>
+                <div className="admin-mobile-card-title">Pagos de Alícuotas por Validar</div>
+                <div className="admin-mobile-card-value">{pagosValidar}</div>
+                <div className="admin-mobile-card-subtitle">Comprobantes pendientes de revisión.</div>
+                <div className="admin-mobile-arrow">→</div>
               </button>
             </div>
           </div>
@@ -2103,6 +3317,33 @@ if (rol === "DIRECTIVA") {
               </button>
             </div>
           </div>
+          <div className="admin-mobile-section">
+            <div className="admin-mobile-section-title"><span>📊</span> Informes</div>
+            <div className="admin-mobile-grid">
+              <button type="button" className="admin-mobile-card admin-card-indigo" onClick={() => router.push("/reportes/viviendas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="viviendas" /></div><div className="admin-mobile-card-title">Informe de Viviendas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen de unidades registradas.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-blue" onClick={() => router.push("/reportes/residentes")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="residentes" /></div><div className="admin-mobile-card-title">Informe de Residentes</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen de residentes registrados.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-slate" onClick={() => router.push("/reportes/guardias")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="guardias" /></div><div className="admin-mobile-card-title">Informe de Guardias</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Resumen del personal registrado.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-rose" onClick={() => router.push("/reportes/novedades")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="novedades" /></div><div className="admin-mobile-card-title">Informe de Novedades</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Situaciones registradas para seguimiento.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-orange" onClick={() => router.push("/reportes/visitas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="visitas" /></div><div className="admin-mobile-card-title">Informe de Visitas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Ingresos registrados en la urbanización.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-cyan" onClick={() => router.push("/reportes/reservas")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="reservas" /></div><div className="admin-mobile-card-title">Informe de Reservas</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Reservas de áreas comunes.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+              <button type="button" className="admin-mobile-card admin-card-green" onClick={() => router.push("/reportes/ingresos")}>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="recaudado" /></div><div className="admin-mobile-card-title">Informe de ingresos: pagados y pendientes</div><div className="admin-mobile-card-value">Consultar</div><div className="admin-mobile-card-subtitle">Detalle de ingresos pagados y pendientes.</div><div className="admin-mobile-arrow">→</div>
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* 🔥 DASHBOARD ADMIN - ESCRITORIO */}
@@ -2166,9 +3407,9 @@ if (rol === "DIRECTIVA") {
                   fontSize: 16,
                 }}
               >
-                Resumen operativo,
-                financiero y administrativo
-                de la urbanización.
+                Resumen financiero,
+                operativo y administrativo
+                de la organización.
               </p>
 
             </div>
@@ -2208,14 +3449,151 @@ if (rol === "DIRECTIVA") {
             marginBottom: 30,
           }}
         >
-
-          <h2
+          <div
             style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 20,
+              flexWrap: "wrap",
               marginBottom: 20,
             }}
           >
-            Resumen Financiero
-          </h2>
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  marginBottom: 6,
+                }}
+              >
+                Resumen Financiero
+              </h2>
+              <div
+                style={{
+                  color: "#64748b",
+                  fontSize: 14,
+                }}
+              >
+                Resumen del período seleccionado de la urbanización.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) <= 0
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (indice > 0) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice - 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  cursor: "pointer",
+                  opacity:
+                    !mesTransparencia ||
+                    mesesTransparencia.indexOf(mesTransparencia) <= 0
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                ←
+              </button>
+
+              <select
+                value={mesTransparencia}
+                onChange={(e) =>
+                  setMesTransparencia(e.target.value)
+                }
+                style={{
+                  minWidth: 190,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: "#fff",
+                  fontWeight: 600,
+                  color: "#0f172a",
+                }}
+              >
+                {mesesTransparencia.length === 0 ? (
+                  <option value="">Sin información</option>
+                ) : (
+                  mesesTransparencia.map((mes) => (
+                    <option key={mes} value={mes}>
+                      {formatoMesTransparencia(mes)}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <button
+                type="button"
+                disabled={
+                  !mesTransparencia ||
+                  mesesTransparencia.indexOf(mesTransparencia) ===
+                    mesesTransparencia.length - 1
+                }
+                onClick={() => {
+                  const indice = mesesTransparencia.indexOf(
+                    mesTransparencia
+                  );
+                  if (
+                    indice >= 0 &&
+                    indice < mesesTransparencia.length - 1
+                  ) {
+                    setMesTransparencia(
+                      mesesTransparencia[indice + 1]
+                    );
+                  }
+                }}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  borderRadius: 10,
+                  padding: "9px 12px",
+                  cursor: "pointer",
+                  opacity:
+                    !mesTransparencia ||
+                    mesesTransparencia.indexOf(mesTransparencia) ===
+                      mesesTransparencia.length - 1
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginBottom: 16,
+              color: "#475569",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            Período: {formatoMesTransparencia(
+              transparenciaSeleccionada.mes
+            )}
+          </div>
 
           <div
             style={{
@@ -2225,64 +3603,115 @@ if (rol === "DIRECTIVA") {
               gap: 20,
             }}
           >
-
             <CardPremium
-              titulo="💰 Recaudado"
-              valor={`$${recaudado.toFixed(2)}`}
+              titulo="🏠 Ingresos por alícuotas"
+              valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
               color="#16a34a"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
             />
 
             <CardPremium
-              titulo="🧾 Gastos"
-              valor={`$${gastos.toFixed(2)}`}
+              titulo="💰 Otros ingresos"
+              valor={`$${transparenciaSeleccionada.otrosIngresos.toFixed(2)}`}
+              color="#059669"
+            />
+
+            <CardPremium
+              titulo="💵 Ingresos totales del mes"
+              valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
+              color="#0f766e"
+            />
+
+            <CardPremium
+              titulo="🧾 Gastos del mes"
+              valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
               color="#dc2626"
               onClick={() =>
                 router.push(
                   "/reportes/gastos"
                 )
               }
+              interactivo={true}
             />
 
             <CardPremium
-              titulo="📊 Saldo"
-              valor={`$${saldo.toFixed(2)}`}
+              titulo="📊 Resultado del mes"
+              valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
+              color={
+                transparenciaSeleccionada.resultado >= 0
+                  ? "#16a34a"
+                  : "#dc2626"
+              }
+            />
+
+            <CardPremium
+              titulo="📘 Saldo acumulado anterior"
+              valor={`$${(
+                transparenciaSeleccionada.saldoAcumulado -
+                transparenciaSeleccionada.resultado
+              ).toFixed(2)}`}
               color="#2563eb"
             />
 
             <CardPremium
-              titulo="⚠ Pendientes"
-              valor={pagosPendientes}
-              color="#f59e0b"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="🚨 Vencidos"
-              valor={pagosVencidos}
-              color="#dc2626"
-              onClick={() =>
-                router.push(
-                  "/reportes/ingresos"
-                )
-              }
-            />
-
-            <CardPremium
-              titulo="⏳ Por validar"
-              valor={pagosValidar}
+              titulo="💼 Nuevo saldo acumulado"
+              valor={`$${transparenciaSeleccionada.saldoAcumulado.toFixed(2)}`}
               color="#7c3aed"
+            />
+          </div>
+
+        </div>
+
+        {/* 🔥 OPERATIVO */}
+
+        <div
+          style={{
+            marginBottom: 30,
+          }}
+        >
+
+          <h2
+            style={{
+              marginBottom: 20,
+            }}
+          >
+            Resumen Operativo
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(230px, 1fr))",
+              gap: 20,
+            }}
+          >
+
+            <Card
+              titulo="📢 Novedades Hoy"
+              valor={novedades}
               onClick={() =>
                 router.push(
-                  "/pagos"
+                  "/reportes/novedades"
+                )
+              }
+            />
+
+            <Card
+              titulo="🚗 Visitas Hoy"
+              valor={visitasHoy}
+              onClick={() =>
+                router.push(
+                  "/reportes/visitas"
+                )
+              }
+            />
+
+            <Card
+              titulo="📅 Reservas Hoy"
+              valor={reservasHoy}
+              onClick={() =>
+                router.push(
+                  "/reportes/reservas"
                 )
               }
             />
@@ -2291,7 +3720,7 @@ if (rol === "DIRECTIVA") {
 
         </div>
 
-        {/* 🔥 OPERATIVO */}
+        {/* 🔥 ADMINISTRATIVO */}
 
         <div>
 
@@ -2300,7 +3729,7 @@ if (rol === "DIRECTIVA") {
               marginBottom: 20,
             }}
           >
-            Resumen Operativo
+            Resumen Administrativo de la Organización
           </h2>
 
           <div
@@ -2358,36 +3787,6 @@ if (rol === "DIRECTIVA") {
               onClick={() =>
                 router.push(
                   "/avisos"
-                )
-              }
-            />
-
-            <Card
-              titulo="📢 Novedades Hoy"
-              valor={novedades}
-              onClick={() =>
-                router.push(
-                  "/reportes/novedades"
-                )
-              }
-            />
-
-            <Card
-              titulo="🚗 Visitas Hoy"
-              valor={visitasHoy}
-              onClick={() =>
-                router.push(
-                  "/reportes/visitas"
-                )
-              }
-            />
-
-            <Card
-              titulo="📅 Reservas Hoy"
-              valor={reservasHoy}
-              onClick={() =>
-                router.push(
-                  "/reportes/reservas"
                 )
               }
             />
@@ -2501,6 +3900,63 @@ const directivaMobileStyles = `
 const adminMobileStyles = `
   .admin-mobile { display: none; }
   .admin-desktop { display: block; }
+
+  /* 📱💻 ADMIN · EXPERIENCIA TABLET
+     Entre 681px y 1100px se conserva el dashboard de escritorio,
+     pero se ajusta automáticamente para aprovechar el ancho disponible
+     sin provocar tarjetas comprimidas ni desbordes. */
+  @media (min-width: 681px) and (max-width: 1100px) {
+    .admin-desktop {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0 16px 30px;
+      overflow-x: hidden;
+    }
+
+    .admin-desktop > div:first-child {
+      padding: 28px 24px !important;
+      border-radius: 24px !important;
+    }
+
+    .admin-desktop > div:first-child h1 {
+      font-size: 32px !important;
+    }
+
+    .admin-desktop h2 {
+      font-size: 28px !important;
+    }
+
+    .admin-desktop > div:nth-child(2) > div:first-child {
+      align-items: flex-start !important;
+    }
+
+    .admin-desktop > div:nth-child(2) select {
+      min-width: 0 !important;
+      width: min(220px, 38vw);
+    }
+
+    .admin-desktop > div:nth-child(2) > div:last-child,
+    .admin-desktop > div:nth-child(3) > div:last-child,
+    .admin-desktop > div:nth-child(4) > div:last-child {
+      gap: 16px !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .admin-desktop > div:nth-child(2) > div:last-child > :last-child:nth-child(odd),
+    .admin-desktop > div:nth-child(3) > div:last-child > :last-child:nth-child(odd),
+    .admin-desktop > div:nth-child(4) > div:last-child > :last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (min-width: 901px) and (max-width: 1100px) {
+    .admin-desktop > div:nth-child(2) > div:last-child,
+    .admin-desktop > div:nth-child(3) > div:last-child,
+    .admin-desktop > div:nth-child(4) > div:last-child {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+  }
+
   @media (max-width: 680px) {
     .admin-desktop { display: none !important; }
     .admin-mobile { display: block; padding: 0 0 28px; }
@@ -2513,8 +3969,17 @@ const adminMobileStyles = `
     .admin-mobile-condominio,.admin-mobile-rol { display:flex; align-items:center; gap:6px; font-size:15px; line-height:1.45; color:#e5e7eb; overflow-wrap:anywhere; }
     .admin-mobile-rol { margin-top:3px; color:#cbd5e1; }
     .admin-mobile-section,.admin-mobile-alertas { margin-bottom:18px; }
-    .admin-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 12px; font-size:17px; font-weight:800; color:#111827; }
+    .admin-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 14px; padding:0 0 9px; font-size:20px; line-height:1.2; font-weight:900; color:#111827; border-bottom:2px solid #dbe3ee; }
+    .admin-mobile-subsection-title { display:flex; align-items:center; gap:8px; margin:16px 2px 10px; padding:9px 0 8px; font-size:16px; line-height:1.2; font-weight:850; color:#334155; border-bottom:1px solid #e2e8f0; }
+    .admin-mobile-account-card { width:100%; min-height:96px; display:flex; align-items:center; gap:13px; position:relative; padding:14px 18px 14px 14px; margin:0 0 16px; border:1px solid #bfdbfe; border-top:4px solid #2563eb; border-radius:20px; background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); color:#1e3a8a; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
+    .admin-mobile-account-card:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
+    .admin-mobile-account-icon { width:50px; height:50px; min-width:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.78); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:24px; }
+    .admin-mobile-account-content { min-width:0; flex:1; padding-right:92px; }
+    .admin-mobile-account-title { font-size:17px; line-height:1.2; font-weight:900; color:#1e3a8a; }
+    .admin-mobile-account-subtitle { margin-top:4px; font-size:12.5px; line-height:1.35; color:#475569; }
+    .admin-mobile-account-action { position:absolute; right:15px; bottom:15px; font-size:14px; font-weight:900; color:#2563eb; white-space:nowrap; }
     .admin-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .admin-mobile-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
     .admin-mobile-card { position:relative; min-width:0; min-height:190px; padding:18px 15px 16px; border:none; border-top:3px solid transparent; border-radius:21px; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
     .admin-mobile-card:focus-visible,.admin-mobile-alert:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
     .admin-mobile-icon { width:58px; height:58px; min-width:58px; border-radius:17px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.72); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:27px; margin-bottom:13px; }
@@ -2540,7 +4005,7 @@ const adminMobileStyles = `
     .admin-mobile-alert .admin-mobile-arrow { right:10px; bottom:22px; font-size:22px; }
     .admin-mobile-alert-warning { background:#fff7ed; border-color:#f59e0b; color:#92400e; }
     .admin-mobile-alert-info { background:#eff6ff; border-color:#60a5fa; color:#1e40af; }
-    @media (max-width:390px) { .admin-mobile-grid{gap:9px;} .admin-mobile-card{min-height:178px;padding:16px 13px 14px;} .admin-mobile-card-title{font-size:15px;} .admin-mobile-card-value{font-size:22px;} .admin-mobile-card-subtitle{font-size:11.5px;} .admin-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .admin-mobile-hola{font-size:20px;} .admin-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:31px;} }
+    @media (max-width:390px) { .admin-mobile-grid{gap:9px;} .admin-mobile-card{min-height:178px;padding:16px 13px 14px;} .admin-mobile-card-title{font-size:15px;} .admin-mobile-card-value{font-size:22px;} .admin-mobile-card-subtitle{font-size:11.5px;} .admin-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .admin-mobile-hola{font-size:20px;} .admin-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:31px;} .admin-mobile-section-title{font-size:18px;} .admin-mobile-subsection-title{font-size:15px;} .admin-mobile-account-card{padding:13px 14px 13px 12px;} .admin-mobile-account-content{padding-right:78px;} .admin-mobile-account-title{font-size:15px;} .admin-mobile-account-subtitle{font-size:11.5px;} .admin-mobile-account-action{right:12px;bottom:12px;font-size:13px;} }
   }
 `;
 
@@ -2892,34 +4357,55 @@ function CardPremium({
   valor,
   color,
   onClick,
+  compact = false,
+  interactivo = false,
 }: any) {
+
+  const [hovered, setHovered] = useState(false);
+  const usaInteraccion = interactivo && !!onClick;
 
   return (
 
     <div
       onClick={onClick}
+      onMouseEnter={() => usaInteraccion && setHovered(true)}
+      onMouseLeave={() => usaInteraccion && setHovered(false)}
       style={{
         background:
-          "#fff",
-        borderRadius: 24,
-        padding: 28,
+          usaInteraccion && hovered ? "#f8fafc" : "#fff",
+        borderRadius: compact ? 16 : 24,
+        padding: compact ? 18 : 28,
         boxShadow:
-          "0 6px 20px rgba(0,0,0,0.08)",
+          usaInteraccion && hovered
+            ? "0 14px 30px rgba(0,0,0,0.14)"
+            : "0 6px 20px rgba(0,0,0,0.08)",
         cursor:
-          onClick
+          usaInteraccion
             ? "pointer"
-            : "default",
+            : onClick
+              ? "pointer"
+              : "default",
         borderTop:
-          `6px solid ${color}`,
+          `${compact ? 4 : 6}px solid ${color}`,
+        transform:
+          usaInteraccion && hovered
+            ? "translateY(-5px) scale(1.015)"
+            : "translateY(0) scale(1)",
+        transition:
+          usaInteraccion
+            ? "transform 180ms ease, box-shadow 180ms ease, background 180ms ease"
+            : "none",
       }}
     >
 
       <div
         style={{
-          fontSize: 15,
+          fontSize: compact ? 13 : 15,
           color:
-            "#6b7280",
-          marginBottom: 14,
+            usaInteraccion && hovered
+              ? color
+              : "#6b7280",
+          marginBottom: compact ? 8 : 14,
           fontWeight:
             "bold",
         }}
@@ -2929,7 +4415,7 @@ function CardPremium({
 
       <div
         style={{
-          fontSize: 38,
+          fontSize: compact ? 24 : 38,
           fontWeight:
             "bold",
           color:
@@ -2937,6 +4423,159 @@ function CardPremium({
         }}
       >
         {valor}
+      </div>
+
+    </div>
+
+  );
+
+}
+
+// 📊 INDICADOR RESUMEN · RESIDENTE PC
+
+function IndicadorResumenResidente({
+  titulo,
+  valor,
+  detalle,
+  color,
+}: {
+  titulo: string;
+  valor: string;
+  detalle: string;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        background: "#f8fafc",
+        borderRadius: 16,
+        padding: "14px 15px",
+        border: `1px solid ${color}22`,
+        borderLeft: `4px solid ${color}`,
+        minHeight: 106,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: "#475569",
+          marginBottom: 7,
+        }}
+      >
+        {titulo}
+      </div>
+      <div
+        style={{
+          fontSize: 23,
+          fontWeight: 800,
+          color,
+          lineHeight: 1.1,
+        }}
+      >
+        {valor}
+      </div>
+      <div
+        style={{
+          marginTop: 7,
+          fontSize: 11.5,
+          lineHeight: 1.35,
+          color: "#64748b",
+        }}
+      >
+        {detalle}
+      </div>
+    </div>
+  );
+}
+
+// ✨ CARD PREMIUM INTERACTIVA · RESIDENTE PC
+
+function CardPremiumInteractiva({
+  titulo,
+  color,
+  detalle,
+  onClick,
+}: any) {
+
+  const [hovered, setHovered] = useState(false);
+
+  return (
+
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? "#f8fafc" : "#fff",
+        borderRadius: 24,
+        padding: 28,
+        minHeight: 154,
+        boxShadow: hovered
+          ? "0 14px 30px rgba(0,0,0,0.14)"
+          : "0 6px 20px rgba(0,0,0,0.08)",
+        cursor: "pointer",
+        borderTop: `6px solid ${color}`,
+        transform: hovered
+          ? "translateY(-5px) scale(1.015)"
+          : "translateY(0) scale(1)",
+        transition:
+          "transform 180ms ease, box-shadow 180ms ease, background 180ms ease",
+      }}
+    >
+
+      <div
+        style={{
+          fontSize: 15,
+          color: hovered ? color : "#6b7280",
+          marginBottom: 14,
+          fontWeight: "bold",
+          transition: "color 180ms ease",
+        }}
+      >
+        {titulo}
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          lineHeight: 1.45,
+          fontWeight: 400,
+          color: hovered ? "#374151" : "#6b7280",
+          minHeight: 44,
+          transition: "color 180ms ease",
+        }}
+      >
+        {detalle}
+      </div>
+
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          color,
+          fontSize: 13,
+          fontWeight: 800,
+          opacity: hovered ? 1 : 0.72,
+          transition: "opacity 180ms ease",
+        }}
+      >
+        <span>
+          {hovered ? "Abrir" : "Acceso disponible"}
+        </span>
+        <span
+          style={{
+            fontSize: 24,
+            lineHeight: 1,
+            transform: hovered ? "translateX(3px)" : "translateX(0)",
+            transition: "transform 180ms ease",
+          }}
+        >
+          →
+        </span>
       </div>
 
     </div>
@@ -2957,20 +4596,35 @@ function Card({
   onClick?: any;
 }) {
 
+  const [hovered, setHovered] = useState(false);
+  const interactivo = !!onClick;
+
   return (
 
     <div
       onClick={onClick}
+      onMouseEnter={() => interactivo && setHovered(true)}
+      onMouseLeave={() => interactivo && setHovered(false)}
       style={{
-        background: "#fff",
+        background: hovered ? "#f8fafc" : "#fff",
         borderRadius: 20,
         padding: 24,
         boxShadow:
-          "0 4px 14px rgba(0,0,0,0.08)",
+          hovered
+            ? "0 14px 30px rgba(0,0,0,0.14)"
+            : "0 4px 14px rgba(0,0,0,0.08)",
         cursor:
           onClick
             ? "pointer"
             : "default",
+        transform:
+          hovered
+            ? "translateY(-5px) scale(1.015)"
+            : "translateY(0) scale(1)",
+        transition:
+          interactivo
+            ? "transform 180ms ease, box-shadow 180ms ease, background 180ms ease"
+            : "none",
       }}
     >
 

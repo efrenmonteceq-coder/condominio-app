@@ -25,6 +25,15 @@ export default function Dashboard() {
 
   const dashboardCargaIniciadaRef = useRef<string | null>(null);
 
+  // 👤 FOTO DE PERFIL · COMPARTIDA ENTRE PC Y MÓVIL
+  const [fotoPerfilMovil, setFotoPerfilMovil] = useState("");
+  const [camaraPerfilMovilAbierta, setCamaraPerfilMovilAbierta] = useState(false);
+  const [mensajeCamaraPerfilMovil, setMensajeCamaraPerfilMovil] = useState("");
+  const [guardandoFotoPerfilMovil, setGuardandoFotoPerfilMovil] = useState(false);
+  const videoPerfilMovilRef = useRef<HTMLVideoElement | null>(null);
+  const streamPerfilMovilRef = useRef<MediaStream | null>(null);
+  const inputFotoPerfilMovilRef = useRef<HTMLInputElement | null>(null);
+
   // 🔥 KPIs
 
   const [viviendas,
@@ -195,6 +204,541 @@ const [limiteGastoAdmin,
       activo = false;
     };
   }, [loading, usuario?.condominio_id]);
+
+
+  // 👤 CARGAR FOTO DE PERFIL PERSISTIDA
+  useEffect(() => {
+    let activo = true;
+
+    const cargarFotoPerfilMovil = async () => {
+      if (loading || !usuario?.id) {
+        return;
+      }
+
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const token = session?.access_token || "";
+
+        if (!token) {
+          return;
+        }
+
+        const response = await fetch("/api/usuarios/perfil-foto", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (!activo || !response.ok) {
+          return;
+        }
+
+        setFotoPerfilMovil(result?.foto_perfil_url || "");
+      } catch (error) {
+        console.warn("ERROR CARGANDO FOTO DE PERFIL MÓVIL:", error);
+      }
+    };
+
+    cargarFotoPerfilMovil();
+
+    return () => {
+      activo = false;
+    };
+  }, [loading, usuario?.id]);
+
+  const detenerCamaraPerfilMovil = () => {
+    streamPerfilMovilRef.current?.getTracks().forEach((track) => track.stop());
+    streamPerfilMovilRef.current = null;
+    setCamaraPerfilMovilAbierta(false);
+    setMensajeCamaraPerfilMovil("");
+  };
+
+  useEffect(() => {
+    return () => {
+      streamPerfilMovilRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const obtenerTokenSesionPerfilMovil = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    return session?.access_token || "";
+  };
+
+  const guardarFotoPerfilMovilEnSupabase = async (archivo: File) => {
+    const token = await obtenerTokenSesionPerfilMovil();
+
+    if (!token) {
+      throw new Error("No hay una sesión autenticada de Supabase.");
+    }
+
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !authUser?.id) {
+      throw new Error("No se pudo verificar la sesión autenticada.");
+    }
+
+    if (!archivo.type.startsWith("image/")) {
+      throw new Error("Selecciona una imagen para la foto de perfil.");
+    }
+
+    if (archivo.size > 8 * 1024 * 1024) {
+      throw new Error("La imagen no puede superar los 8 MB.");
+    }
+
+    let extension = "jpg";
+
+    if (archivo.type === "image/png") extension = "png";
+    if (archivo.type === "image/webp") extension = "webp";
+    if (archivo.type === "image/gif") extension = "gif";
+
+    const path = `${authUser.id}/perfil.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("fotos-perfil")
+      .upload(path, archivo, {
+        upsert: true,
+        contentType: archivo.type,
+        cacheControl: "3600",
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message || "No se pudo subir la foto.");
+    }
+
+    try {
+      const response = await fetch("/api/usuarios/perfil-foto", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          foto_perfil_path: path,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || !result?.success) {
+        await supabase.storage.from("fotos-perfil").remove([path]);
+        throw new Error(
+          result?.error || "No se pudo registrar la foto de perfil."
+        );
+      }
+
+      if (result?.foto_perfil_url) {
+        setFotoPerfilMovil(result.foto_perfil_url);
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("renalix-foto-perfil-actualizada", {
+              detail: {
+                foto_perfil_url: result.foto_perfil_url,
+              },
+            })
+          );
+        }
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const procesarArchivoFotoPerfilMovil = async (archivo: File) => {
+    try {
+      setGuardandoFotoPerfilMovil(true);
+      await guardarFotoPerfilMovilEnSupabase(archivo);
+    } catch (error: any) {
+      alert(
+        error?.message ||
+          "No se pudo guardar la foto de perfil."
+      );
+    } finally {
+      setGuardandoFotoPerfilMovil(false);
+    }
+  };
+
+  const manejarArchivoFotoPerfilMovil = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const archivo = event.target.files?.[0];
+
+    if (!archivo) {
+      return;
+    }
+
+    await procesarArchivoFotoPerfilMovil(archivo);
+    event.target.value = "";
+  };
+
+  const abrirSelectorArchivoFotoPerfilMovil = async () => {
+    try {
+      if ("showOpenFilePicker" in window) {
+        const selector = (
+          window as Window & {
+            showOpenFilePicker?: (options?: {
+              multiple?: boolean;
+              types?: Array<{
+                description?: string;
+                accept: Record<string, string[]>;
+              }>;
+              startIn?: string;
+            }) => Promise<any[]>;
+          }
+        ).showOpenFilePicker;
+
+        if (selector) {
+          const [handle] = await selector({
+            multiple: false,
+            startIn: "pictures",
+            types: [
+              {
+                description: "Imágenes",
+                accept: {
+                  "image/*": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+                },
+              },
+            ],
+          });
+
+          const archivo = await handle.getFile();
+          await procesarArchivoFotoPerfilMovil(archivo);
+          return;
+        }
+      }
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+    }
+
+    inputFotoPerfilMovilRef.current?.click();
+  };
+
+  const abrirCamaraPerfilMovil = async () => {
+    setMensajeCamaraPerfilMovil("");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      await abrirSelectorArchivoFotoPerfilMovil();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+
+      streamPerfilMovilRef.current = stream;
+      setCamaraPerfilMovilAbierta(true);
+
+      requestAnimationFrame(() => {
+        if (videoPerfilMovilRef.current) {
+          videoPerfilMovilRef.current.srcObject = stream;
+          videoPerfilMovilRef.current.play().catch(() => undefined);
+        }
+      });
+    } catch (error: any) {
+      const nombreError = error?.name || "";
+
+      if (
+        nombreError === "NotAllowedError" ||
+        nombreError === "SecurityError" ||
+        nombreError === "NotFoundError" ||
+        nombreError === "NotReadableError" ||
+        nombreError === "OverconstrainedError" ||
+        nombreError === "TypeError"
+      ) {
+        setMensajeCamaraPerfilMovil(
+          "No se pudo utilizar la cámara. Abriendo selector de imágenes…"
+        );
+        await abrirSelectorArchivoFotoPerfilMovil();
+        setMensajeCamaraPerfilMovil("");
+        return;
+      }
+
+      await abrirSelectorArchivoFotoPerfilMovil();
+    }
+  };
+
+  const tomarFotoPerfilMovil = async () => {
+    const video = videoPerfilMovilRef.current;
+    const stream = streamPerfilMovilRef.current;
+
+    if (!video || !stream || video.readyState < 2) {
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+
+    const contexto = canvas.getContext("2d");
+
+    if (!contexto) {
+      detenerCamaraPerfilMovil();
+      return;
+    }
+
+    contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.9);
+    });
+
+    detenerCamaraPerfilMovil();
+
+    if (!blob) {
+      alert("No se pudo generar la fotografía.");
+      return;
+    }
+
+    const archivo = new File([blob], "perfil.jpg", {
+      type: "image/jpeg",
+    });
+
+    await procesarArchivoFotoPerfilMovil(archivo);
+  };
+
+  const renderAvatarPerfilMovil = (fallback: string, ariaLabel: string) => (
+    <button
+      type="button"
+      onClick={abrirCamaraPerfilMovil}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      disabled={guardandoFotoPerfilMovil}
+      style={{
+        position: "relative",
+        width: 66,
+        height: 66,
+        minWidth: 66,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        padding: 0,
+        cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
+        background: "rgba(255,255,255,.14)",
+        border: "1px solid rgba(255,255,255,.18)",
+        color: "#fff",
+        fontSize: 32,
+        appearance: "none",
+        boxShadow: "0 5px 15px rgba(15,23,42,.16)",
+      }}
+    >
+      {fotoPerfilMovil ? (
+        <img
+          src={fotoPerfilMovil}
+          alt="Foto de perfil"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      ) : (
+        <span aria-hidden="true">{fallback}</span>
+      )}
+
+      <span
+        style={{
+          position: "absolute",
+          right: 0,
+          bottom: 0,
+          width: 22,
+          height: 22,
+          borderRadius: "50%",
+          background: "#fff",
+          color: "#2563eb",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 12,
+          boxShadow: "0 2px 8px rgba(15,23,42,.22)",
+        }}
+      >
+        {guardandoFotoPerfilMovil ? "…" : "📷"}
+      </span>
+    </button>
+  );
+
+  const modalFotoPerfilMovil = camaraPerfilMovilAbierta ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tomar foto de perfil"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 3000,
+        background: "rgba(15,23,42,.82)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "min(92vw, 560px)",
+          background: "#fff",
+          borderRadius: 22,
+          padding: 16,
+          boxShadow: "0 20px 60px rgba(0,0,0,.35)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
+          <strong style={{ fontSize: 17, color: "#111827" }}>
+            📷 Tomar foto de perfil
+          </strong>
+
+          <button
+            type="button"
+            onClick={detenerCamaraPerfilMovil}
+            aria-label="Cerrar cámara"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              border: "none",
+              background: "#f3f4f6",
+              color: "#374151",
+              cursor: "pointer",
+              fontSize: 18,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div
+          style={{
+            width: "100%",
+            aspectRatio: "4 / 3",
+            background: "#111827",
+            borderRadius: 16,
+            overflow: "hidden",
+          }}
+        >
+          <video
+            ref={videoPerfilMovilRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </div>
+
+        {mensajeCamaraPerfilMovil && (
+          <p
+            style={{
+              margin: "12px 0 0",
+              fontSize: 13,
+              color: "#475569",
+              textAlign: "center",
+            }}
+          >
+            {mensajeCamaraPerfilMovil}
+          </p>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            marginTop: 14,
+          }}
+        >
+          <button
+            type="button"
+            onClick={tomarFotoPerfilMovil}
+            disabled={guardandoFotoPerfilMovil}
+            style={{
+              border: "none",
+              borderRadius: 12,
+              padding: "12px 18px",
+              background: "linear-gradient(135deg,#2563eb,#4f46e5)",
+              color: "#fff",
+              fontWeight: 700,
+              cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            📸 Tomar foto
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              detenerCamaraPerfilMovil();
+              abrirSelectorArchivoFotoPerfilMovil();
+            }}
+            disabled={guardandoFotoPerfilMovil}
+            style={{
+              border: "1px solid #d1d5db",
+              borderRadius: 12,
+              padding: "12px 18px",
+              background: "#fff",
+              color: "#374151",
+              fontWeight: 700,
+              cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            🖼️ Elegir imagen
+          </button>
+
+          <button
+            type="button"
+            onClick={detenerCamaraPerfilMovil}
+            disabled={guardandoFotoPerfilMovil}
+            style={{
+              border: "1px solid #d1d5db",
+              borderRadius: 12,
+              padding: "12px 18px",
+              background: "#fff",
+              color: "#374151",
+              fontWeight: 700,
+              cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
+              fontSize: 14,
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   // 🔥 CARGAR DATOS
   // La carga de KPIs es independiente del nombre de la urbanización.
@@ -1525,6 +2069,19 @@ if (rol === "RESIDENTE") {
           ========================================== */}
 
       <div className="residente-mobile">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media (max-width: 680px) {
+            .residente-mobile .residente-mobile-title { font-size: 19px !important; line-height: 1.28 !important; }
+            .residente-mobile .residente-mobile-subtitle { font-size: 14.5px !important; line-height: 1.4 !important; }
+            .residente-mobile .residente-mobile-resumen-title { font-size: 20px !important; }
+            .residente-mobile .residente-mobile-mini strong { font-size: 23px !important; }
+            .residente-mobile .residente-mobile-mini small { font-size: 14px !important; line-height: 1.25 !important; }
+            .residente-mobile .residente-mobile-mini > div { font-size: 13.5px !important; line-height: 1.4 !important; }
+            .residente-mobile div[style*="font-size: 11px"] { font-size: 12.5px !important; line-height: 1.3 !important; }
+            .residente-mobile .residente-mobile-condominio,
+            .residente-mobile .residente-mobile-vivienda { font-size: 15.5px !important; }
+          }
+        ` }} />
 
         {/* 🔔 AVISOS PENDIENTES */}
         {(avisoUrgentePendiente || avisosImportantesPendientes > 0) && (
@@ -1592,11 +2149,10 @@ if (rol === "RESIDENTE") {
           }}
         >
           <div className="residente-mobile-header-glow" />
+          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
 
           <div className="residente-mobile-saludo">
-            <div className="residente-mobile-avatar">
-              <span>👤</span>
-            </div>
+            {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
 
             <div className="residente-mobile-header-info">
               <div className="residente-mobile-hola">
@@ -1617,6 +2173,16 @@ if (rol === "RESIDENTE") {
             </div>
           </div>
         </div>
+
+        <input
+          ref={inputFotoPerfilMovilRef}
+          type="file"
+          accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+          onChange={manejarArchivoFotoPerfilMovil}
+          style={{ display: "none" }}
+        />
+
+        {modalFotoPerfilMovil}
 
         {/* ACCIONES PRINCIPALES */}
 
@@ -1906,77 +2472,302 @@ if (rol === "RESIDENTE") {
 
         </div>
 
-        {/* RESUMEN */}
+        {/* MI SITUACIÓN ACTUAL */}
 
         <div className="residente-mobile-resumen">
           <div className="residente-mobile-resumen-title">
             <span>📊</span>
-            Resumen de hoy
+            Mi situación actual
           </div>
 
-          <div className="residente-mobile-resumen-grid">
+          <div
+            style={{
+              marginTop: 12,
+              marginBottom: 14,
+              color: "#64748b",
+              fontSize: 13,
+            }}
+          >
+            Resumen inmediato de tu estado personal.
+          </div>
 
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+              gap: 10,
+            }}
+          >
             <div className="residente-mobile-mini">
               <span className="residente-mobile-mini-icon">
-                <IconoMovil tipo="areas" />
+                <IconoMovil tipo="cuenta" />
               </span>
-              <strong>{reservasHoy}</strong>
-              <small>Reservas hoy</small>
-            </div>
-
-            <div className="residente-mobile-mini">
-              <span className="residente-mobile-mini-icon">
-                <IconoMovil tipo="visitas" />
-              </span>
-              <strong>{visitasHoy}</strong>
-              <small>Visitas hoy</small>
-            </div>
-
-            <div className="residente-mobile-mini">
-              <span className="residente-mobile-mini-icon">
-                <IconoMovil tipo="novedad" />
-              </span>
-              <strong>{novedades}</strong>
-              <small>Novedades</small>
+              <strong>{`$${resumenPersonalResidente.saldoPendiente.toFixed(2)}`}</strong>
+              <small>💰 Saldo pendiente</small>
+              <div style={{ marginTop: 5, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
+                {resumenPersonalResidente.saldoPendiente > 0
+                  ? "Total que tienes pendiente de pago."
+                  : "No tienes saldo pendiente."}
+              </div>
             </div>
 
             <div className="residente-mobile-mini">
               <span className="residente-mobile-mini-icon">
                 <IconoMovil tipo="cuenta" />
               </span>
-              <strong>{pagosPendientes}</strong>
-              <small>Pagos pendientes</small>
+              <strong>
+                {resumenPersonalResidente.proximaAlicuota
+                  ? `$${Number(resumenPersonalResidente.proximaAlicuota.saldo_pendiente || 0).toFixed(2)}`
+                  : "Al día"}
+              </strong>
+              <small>📅 Próxima alícuota</small>
+              <div style={{ marginTop: 5, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
+                {resumenPersonalResidente.proximaAlicuota
+                  ? `Vence: ${String(resumenPersonalResidente.proximaAlicuota.fecha_vencimiento || "Sin fecha").slice(0, 10)}`
+                  : "No tienes alícuotas pendientes."}
+              </div>
             </div>
 
+            <div className="residente-mobile-mini">
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="pagos" />
+              </span>
+              <strong>{String(resumenPersonalResidente.pagosPorValidar)}</strong>
+              <small>🧾 Pagos por validar</small>
+              <div style={{ marginTop: 5, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
+                {resumenPersonalResidente.pagosPorValidar === 0
+                  ? "No tienes pagos pendientes de validación."
+                  : resumenPersonalResidente.pagosPorValidar === 1
+                    ? "Pago enviado pendiente de validación."
+                    : "Pagos enviados pendientes de validación."}
+              </div>
+            </div>
+
+            <div className="residente-mobile-mini">
+              <span className="residente-mobile-mini-icon">
+                <IconoMovil tipo="novedad" />
+              </span>
+              <strong>{String(avisosPendientesResidente)}</strong>
+              <small>📢 Avisos pendientes</small>
+              <div style={{ marginTop: 5, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
+                {avisosPendientesResidente === 0
+                  ? "No tienes avisos pendientes."
+                  : "Avisos publicados que aún no has leído."}
+              </div>
+            </div>
           </div>
         </div>
 
-          <div style={{ gridColumn: "1 / -1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 18, padding: 14 }}>
-            <div style={{ marginBottom: 12 }}>
-              <div className="residente-mobile-title" style={{ margin: 0 }}>Transparencia Financiera</div>
-              <div className="residente-mobile-subtitle" style={{ marginTop: 4 }}>De la urbanización · corte mensual</div>
+        {/* TRANSPARENCIA FINANCIERA */}
+
+        <div
+          style={{
+            marginTop: 18,
+            marginBottom: 18,
+            padding: 14,
+            borderRadius: 18,
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <div
+            style={{
+              marginBottom: 12,
+            }}
+          >
+            <div
+              className="residente-mobile-title"
+              style={{ margin: 0 }}
+            >
+              Transparencia Financiera de la urbanización
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <button type="button" disabled={!mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparenciaResidenteMovil); if (indice > 0) setMesTransparenciaResidenteMovil(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0 ? 0.45 : 1 }}>←</button>
-              <select
-                value={mesTransparenciaResidenteMovil}
-                onChange={(e) => setMesTransparenciaResidenteMovil(e.target.value)}
-                onInput={(e) => setMesTransparenciaResidenteMovil((e.target as HTMLSelectElement).value)}
-                style={{ flex: 1, minWidth: 0, border: "1px solid #cbd5e1", borderRadius: 9, padding: "9px 10px", background: "#fff", fontWeight: 600, color: "#0f172a" }}
-              >
-                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
-              </select>
-              <button type="button" disabled={!mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparenciaResidenteMovil); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparenciaResidenteMovil(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 9, padding: "8px 11px", cursor: "pointer", opacity: !mesTransparenciaResidenteMovil || mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 10 }}>Período: {formatoMesTransparencia(transparenciaSeleccionadaResidenteMovil.mes)}</div>
-            <div key={`residente-finanzas-${mesTransparenciaResidenteMovil}`} style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 9 }}>
-              <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#047857" }}>Ingresos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#065f46", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.ingresos.toFixed(2)}</div></div>
-              <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#be123c" }}>Gastos del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: "#9f1239", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.egresos.toFixed(2)}</div></div>
-              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del mes</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.resultado >= 0 ? "#1e3a8a" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.resultado.toFixed(2)}</div></div>
-              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 13, padding: 11 }}><div style={{ fontSize: 11, color: "#6d28d9" }}>Saldo acumulado</div><div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.saldoAcumulado >= 0 ? "#5b21b6" : "#dc2626", marginTop: 4 }}>${transparenciaSeleccionadaResidenteMovil.saldoAcumulado.toFixed(2)}</div></div>
+            <div
+              className="residente-mobile-subtitle"
+              style={{ marginTop: 4 }}
+            >
+              Corte mensual de ingresos, gastos y saldo acumulado.
             </div>
           </div>
 
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              disabled={
+                !mesTransparenciaResidenteMovil ||
+                mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(
+                  mesTransparenciaResidenteMovil
+                );
+                if (indice > 0) {
+                  setMesTransparenciaResidenteMovil(
+                    mesesTransparencia[indice - 1]
+                  );
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparenciaResidenteMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              ←
+            </button>
+
+            <select
+              value={mesTransparenciaResidenteMovil}
+              onChange={(e) =>
+                setMesTransparenciaResidenteMovil(e.target.value)
+              }
+              onInput={(e) =>
+                setMesTransparenciaResidenteMovil(
+                  (e.target as HTMLSelectElement).value
+                )
+              }
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "1px solid #cbd5e1",
+                borderRadius: 9,
+                padding: "9px 10px",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#0f172a",
+              }}
+            >
+              {mesesTransparencia.length === 0 ? (
+                <option value="">Sin información</option>
+              ) : (
+                mesesTransparencia.map((mes) => (
+                  <option key={mes} value={mes}>
+                    {formatoMesTransparencia(mes)}
+                  </option>
+                ))
+              )}
+            </select>
+
+            <button
+              type="button"
+              disabled={
+                !mesTransparenciaResidenteMovil ||
+                mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) ===
+                  mesesTransparencia.length - 1
+              }
+              onClick={() => {
+                const indice = mesesTransparencia.indexOf(
+                  mesTransparenciaResidenteMovil
+                );
+                if (
+                  indice >= 0 &&
+                  indice < mesesTransparencia.length - 1
+                ) {
+                  setMesTransparenciaResidenteMovil(
+                    mesesTransparencia[indice + 1]
+                  );
+                }
+              }}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                borderRadius: 9,
+                padding: "8px 11px",
+                cursor: "pointer",
+                opacity:
+                  !mesTransparenciaResidenteMovil ||
+                  mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) ===
+                    mesesTransparencia.length - 1
+                    ? 0.45
+                    : 1,
+              }}
+            >
+              →
+            </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#475569",
+              marginBottom: 10,
+            }}
+          >
+            Período: {formatoMesTransparencia(transparenciaSeleccionadaResidenteMovil.mes)}
+          </div>
+
+          <div
+            key={`residente-finanzas-${mesTransparenciaResidenteMovil}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+              gap: 9,
+            }}
+          >
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#047857" }}>Ingresos por alícuotas</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#065f46", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.ingresosAlicuotas.toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#047857" }}>Otros ingresos</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#065f46", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.otrosIngresos.toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#ecfeff", border: "1px solid #a5f3fc", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#0f766e" }}>Ingresos totales del mes</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#115e59", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.ingresos.toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#be123c" }}>Gastos del mes</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#9f1239", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.egresos.toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del mes</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.resultado >= 0 ? "#1e3a8a" : "#dc2626", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.resultado.toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#4338ca" }}>Saldo acumulado anterior</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#3730a3", marginTop: 4 }}>
+                ${(transparenciaSeleccionadaResidenteMovil.saldoAcumulado - transparenciaSeleccionadaResidenteMovil.resultado).toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 13, padding: 11 }}>
+              <div style={{ fontSize: 11, color: "#6d28d9" }}>Nuevo saldo acumulado</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.saldoAcumulado >= 0 ? "#5b21b6" : "#dc2626", marginTop: 4 }}>
+                ${transparenciaSeleccionadaResidenteMovil.saldoAcumulado.toFixed(2)}
+              </div>
+            </div>
+          </div>
+        </div>
 
       </div>
     </>
@@ -2222,8 +3013,9 @@ if (rol === "RESIDENTE") {
         <div className="guardia-mobile">
           <div className="guardia-mobile-header">
             <div className="guardia-mobile-header-glow" />
+            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
             <div className="guardia-mobile-saludo">
-              <div className="guardia-mobile-avatar">🛡️</div>
+              {renderAvatarPerfilMovil("🛡️", "Cambiar foto de perfil")}
               <div className="guardia-mobile-header-info">
                 <div className="guardia-mobile-hola">
                   ¡Hola, {usuario.nombre || "Guardia"}!
@@ -2239,6 +3031,16 @@ if (rol === "RESIDENTE") {
               </div>
             </div>
           </div>
+
+          <input
+            ref={inputFotoPerfilMovilRef}
+            type="file"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+            onChange={manejarArchivoFotoPerfilMovil}
+            style={{ display: "none" }}
+          />
+
+          {modalFotoPerfilMovil}
 
           <div className="guardia-mobile-section">
             <div className="guardia-mobile-section-title">
@@ -2791,8 +3593,9 @@ if (rol === "DIRECTIVA") {
       <div className="directiva-mobile">
         <div className="directiva-mobile-header">
           <div className="directiva-mobile-header-glow" />
+          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
           <div className="directiva-mobile-saludo">
-            <div className="directiva-mobile-avatar">🏛️</div>
+            {renderAvatarPerfilMovil("🏛️", "Cambiar foto de perfil")}
             <div className="directiva-mobile-header-info">
               <div className="directiva-mobile-hola">¡Hola, {usuario.nombre || "Directiva"}!</div>
               <div className="directiva-mobile-condominio">🌐 {cargandoCondominio ? "Cargando urbanización..." : nombreCondominio || "Urbanización no disponible"}</div>
@@ -2800,6 +3603,16 @@ if (rol === "DIRECTIVA") {
             </div>
           </div>
         </div>
+
+        <input
+          ref={inputFotoPerfilMovilRef}
+          type="file"
+          accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+          onChange={manejarArchivoFotoPerfilMovil}
+          style={{ display: "none" }}
+        />
+
+        {modalFotoPerfilMovil}
 
         <div className="directiva-mobile-section">
           <div className="directiva-mobile-section-title">💰 Resumen Financiero</div>
@@ -3043,8 +3856,9 @@ if (rol === "DIRECTIVA") {
         <div className="admin-mobile">
           <div className="admin-mobile-header">
             <div className="admin-mobile-header-glow" />
+            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
             <div className="admin-mobile-saludo">
-              <div className="admin-mobile-avatar">👤</div>
+              {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
               <div className="admin-mobile-header-info">
                 <div className="admin-mobile-hola">¡Hola, {usuario.nombre || "Administrador"}!</div>
                 <div className="admin-mobile-condominio">🌐 {cargandoCondominio ? "Cargando urbanización..." : nombreCondominio || "Urbanización no disponible"}</div>
@@ -3052,6 +3866,16 @@ if (rol === "DIRECTIVA") {
               </div>
             </div>
           </div>
+
+          <input
+            ref={inputFotoPerfilMovilRef}
+            type="file"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+            onChange={manejarArchivoFotoPerfilMovil}
+            style={{ display: "none" }}
+          />
+
+          {modalFotoPerfilMovil}
 
           {(pagosValidar > 0 || lecturasPendientesAdmin > 0) && (
             <div className="admin-mobile-alertas">
@@ -3819,14 +4643,14 @@ const guardiaMobileStyles = `
     .guardia-mobile-condominio,.guardia-mobile-rol { display:flex; align-items:center; gap:6px; font-size:15px; line-height:1.45; color:#e5e7eb; overflow-wrap:anywhere; }
     .guardia-mobile-rol { margin-top:3px; color:#cbd5e1; }
     .guardia-mobile-section { margin-bottom:20px; }
-    .guardia-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 12px; font-size:17px; font-weight:800; color:#111827; }
+    .guardia-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 12px; font-size:18px; font-weight:800; color:#111827; }
     .guardia-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     .guardia-mobile-card { position:relative; min-width:0; min-height:188px; padding:18px 15px 16px; border:none; border-top:3px solid transparent; border-radius:21px; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
     .guardia-mobile-card:focus-visible,.guardia-mobile-wide-card:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
     .guardia-mobile-icon { width:58px; height:58px; min-width:58px; border-radius:17px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.72); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:27px; margin-bottom:13px; }
-    .guardia-mobile-card-title { font-size:16.5px; line-height:1.14; font-weight:800; margin-bottom:5px; }
-    .guardia-mobile-card-value { font-size:23px; line-height:1.05; font-weight:900; margin-bottom:6px; }
-    .guardia-mobile-card-subtitle { font-size:12.5px; line-height:1.35; opacity:.78; max-width:92%; }
+    .guardia-mobile-card-title { font-size:19px; line-height:1.2; font-weight:800; margin-bottom:5px; }
+    .guardia-mobile-card-value { font-size:24px; line-height:1.05; font-weight:900; margin-bottom:6px; }
+    .guardia-mobile-card-subtitle { font-size:14.5px; line-height:1.4; opacity:.78; max-width:92%; }
     .guardia-mobile-arrow { position:absolute; right:14px; bottom:12px; font-size:25px; line-height:1; font-weight:800; }
     .guardia-card-blue { background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); border-top-color:#3b82f6; color:#1e3a8a; }
     .guardia-card-red { background:linear-gradient(145deg,#fff1f2 0%,#fecdd3 100%); border-top-color:#f43f5e; color:#881337; }
@@ -3842,13 +4666,13 @@ const guardiaMobileStyles = `
     .guardia-mobile-wide-text { min-width:0; }
     .guardia-mobile-wide-card .guardia-mobile-card-subtitle { max-width:100%; }
     .guardia-mobile-resumen { padding:17px; border-radius:21px; background:#f8fafc; border:1px solid #e2e8f0; box-shadow:0 6px 18px rgba(15,23,42,.06); }
-    .guardia-mobile-resumen-title { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:800; color:#111827; margin-bottom:13px; }
+    .guardia-mobile-resumen-title { display:flex; align-items:center; gap:8px; font-size:19px; font-weight:800; color:#111827; margin-bottom:13px; }
     .guardia-mobile-resumen-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .guardia-mobile-mini { min-width:0; padding:12px; border-radius:16px; background:#fff; border:1px solid #e5e7eb; text-align:center; }
     .guardia-mobile-mini-icon { width:38px; height:38px; margin:0 auto 7px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; font-size:20px; }
-    .guardia-mobile-mini strong { display:block; font-size:22px; line-height:1.1; color:#111827; }
-    .guardia-mobile-mini small { display:block; margin-top:4px; font-size:11.5px; color:#64748b; line-height:1.2; }
-    @media (max-width:390px) { .guardia-mobile-grid{gap:9px;} .guardia-mobile-card{min-height:178px;padding:16px 13px 14px;} .guardia-mobile-card-title{font-size:15px;} .guardia-mobile-card-value{font-size:21px;} .guardia-mobile-card-subtitle{font-size:11.5px;} .guardia-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .guardia-mobile-hola{font-size:20px;} .guardia-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:29px;} }
+    .guardia-mobile-mini strong { display:block; font-size:24px; line-height:1.1; color:#111827; }
+    .guardia-mobile-mini small { display:block; margin-top:4px; font-size:14px; color:#64748b; line-height:1.25; }
+    @media (max-width:390px) { .guardia-mobile-grid{gap:9px;} .guardia-mobile-card{min-height:178px;padding:16px 13px 14px;} .guardia-mobile-card-title{font-size:18px;} .guardia-mobile-card-value{font-size:22px;} .guardia-mobile-card-subtitle{font-size:14px;} .guardia-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .guardia-mobile-hola{font-size:20px;} .guardia-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:29px;} }
   }
 `;
 
@@ -3867,14 +4691,14 @@ const directivaMobileStyles = `
     .directiva-mobile-hola { font-size:22px; font-weight:800; margin-bottom:8px; }
     .directiva-mobile-condominio,.directiva-mobile-rol { display:flex; align-items:center; gap:7px; color:#dbeafe; font-size:14px; margin-top:4px; }
     .directiva-mobile-section { margin-bottom:18px; }
-    .directiva-mobile-section-title { font-size:16px; font-weight:800; color:#111827; margin:0 0 10px; }
+    .directiva-mobile-section-title { font-size:18px; font-weight:800; color:#111827; margin:0 0 10px; }
     .directiva-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .directiva-mobile-card { position:relative; width:100%; min-height:148px; border:1px solid rgba(148,163,184,.20); border-radius:20px; padding:16px; text-align:left; cursor:pointer; box-shadow:0 5px 16px rgba(15,23,42,.07); transition:transform .15s ease; }
     .directiva-mobile-card:active { transform:scale(.98); }
     .directiva-mobile-icon { width:48px; height:48px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.78); margin-bottom:12px; }
-    .directiva-mobile-card-title { font-size:15px; line-height:1.25; font-weight:800; color:#111827; }
-    .directiva-mobile-card-value { margin-top:5px; font-size:22px; font-weight:900; color:#1d4ed8; }
-    .directiva-mobile-card-subtitle { margin-top:5px; font-size:12px; line-height:1.35; color:#64748b; }
+    .directiva-mobile-card-title { font-size:18px; line-height:1.3; font-weight:800; color:#111827; }
+    .directiva-mobile-card-value { margin-top:5px; font-size:23px; font-weight:900; color:#1d4ed8; }
+    .directiva-mobile-card-subtitle { margin-top:5px; font-size:14.5px; line-height:1.4; color:#64748b; }
     .directiva-mobile-arrow { position:absolute; right:14px; bottom:13px; font-size:20px; font-weight:800; color:#2563eb; }
     .directiva-card-green { background:linear-gradient(145deg,#ecfdf5 0%,#d1fae5 100%); border-top:3px solid #10b981; }
     .directiva-card-red { background:linear-gradient(145deg,#fff1f2 0%,#fecdd3 100%); border-top:3px solid #f43f5e; }
@@ -3883,12 +4707,12 @@ const directivaMobileStyles = `
     .directiva-card-purple { background:linear-gradient(145deg,#f5f3ff 0%,#e9d5ff 100%); border-top:3px solid #8b5cf6; }
     .directiva-card-indigo { background:linear-gradient(145deg,#eef2ff 0%,#e0e7ff 100%); border-top:3px solid #6366f1; }
     .directiva-mobile-resumen { background:#fff; border-radius:20px; padding:16px; box-shadow:0 5px 16px rgba(15,23,42,.07); margin-top:4px; }
-    .directiva-mobile-resumen-title { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:800; color:#111827; margin-bottom:12px; }
+    .directiva-mobile-resumen-title { display:flex; align-items:center; gap:8px; font-size:19px; font-weight:800; color:#111827; margin-bottom:12px; }
     .directiva-mobile-resumen-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
     .directiva-mobile-mini { min-height:82px; border-radius:16px; background:#f8fafc; padding:12px; display:flex; flex-direction:column; justify-content:center; }
     .directiva-mobile-mini-icon { font-size:20px; margin-bottom:5px; }
-    .directiva-mobile-mini strong { font-size:21px; color:#1d4ed8; }
-    .directiva-mobile-mini small { color:#64748b; font-size:11px; margin-top:2px; }
+    .directiva-mobile-mini strong { font-size:23px; color:#1d4ed8; }
+    .directiva-mobile-mini small { color:#64748b; font-size:13.5px; margin-top:2px; }
     @media (max-width: 380px) {
       .directiva-mobile-grid { grid-template-columns:1fr; }
       .directiva-mobile-card { min-height:132px; }
@@ -3969,23 +4793,23 @@ const adminMobileStyles = `
     .admin-mobile-condominio,.admin-mobile-rol { display:flex; align-items:center; gap:6px; font-size:15px; line-height:1.45; color:#e5e7eb; overflow-wrap:anywhere; }
     .admin-mobile-rol { margin-top:3px; color:#cbd5e1; }
     .admin-mobile-section,.admin-mobile-alertas { margin-bottom:18px; }
-    .admin-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 14px; padding:0 0 9px; font-size:20px; line-height:1.2; font-weight:900; color:#111827; border-bottom:2px solid #dbe3ee; }
-    .admin-mobile-subsection-title { display:flex; align-items:center; gap:8px; margin:16px 2px 10px; padding:9px 0 8px; font-size:16px; line-height:1.2; font-weight:850; color:#334155; border-bottom:1px solid #e2e8f0; }
+    .admin-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 14px; padding:0 0 9px; font-size:21px; line-height:1.2; font-weight:900; color:#111827; border-bottom:2px solid #dbe3ee; }
+    .admin-mobile-subsection-title { display:flex; align-items:center; gap:8px; margin:16px 2px 10px; padding:9px 0 8px; font-size:17px; line-height:1.2; font-weight:850; color:#334155; border-bottom:1px solid #e2e8f0; }
     .admin-mobile-account-card { width:100%; min-height:96px; display:flex; align-items:center; gap:13px; position:relative; padding:14px 18px 14px 14px; margin:0 0 16px; border:1px solid #bfdbfe; border-top:4px solid #2563eb; border-radius:20px; background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); color:#1e3a8a; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
     .admin-mobile-account-card:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
     .admin-mobile-account-icon { width:50px; height:50px; min-width:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.78); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:24px; }
     .admin-mobile-account-content { min-width:0; flex:1; padding-right:92px; }
-    .admin-mobile-account-title { font-size:17px; line-height:1.2; font-weight:900; color:#1e3a8a; }
-    .admin-mobile-account-subtitle { margin-top:4px; font-size:12.5px; line-height:1.35; color:#475569; }
+    .admin-mobile-account-title { font-size:19px; line-height:1.24; font-weight:900; color:#1e3a8a; }
+    .admin-mobile-account-subtitle { margin-top:4px; font-size:14.5px; line-height:1.4; color:#475569; }
     .admin-mobile-account-action { position:absolute; right:15px; bottom:15px; font-size:14px; font-weight:900; color:#2563eb; white-space:nowrap; }
     .admin-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     .admin-mobile-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
     .admin-mobile-card { position:relative; min-width:0; min-height:190px; padding:18px 15px 16px; border:none; border-top:3px solid transparent; border-radius:21px; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
     .admin-mobile-card:focus-visible,.admin-mobile-alert:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
     .admin-mobile-icon { width:58px; height:58px; min-width:58px; border-radius:17px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.72); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:27px; margin-bottom:13px; }
-    .admin-mobile-card-title { font-size:17px; line-height:1.12; font-weight:800; margin-bottom:5px; }
-    .admin-mobile-card-value { font-size:25px; line-height:1.05; font-weight:900; margin-bottom:6px; }
-    .admin-mobile-card-subtitle { font-size:12.5px; line-height:1.35; opacity:.78; max-width:92%; }
+    .admin-mobile-card-title { font-size:19px; line-height:1.2; font-weight:800; margin-bottom:5px; }
+    .admin-mobile-card-value { font-size:26px; line-height:1.05; font-weight:900; margin-bottom:6px; }
+    .admin-mobile-card-subtitle { font-size:14.5px; line-height:1.4; opacity:.78; max-width:92%; }
     .admin-mobile-arrow { position:absolute; right:14px; bottom:12px; font-size:25px; line-height:1; font-weight:800; }
     .admin-card-green { background:linear-gradient(145deg,#ecfdf5 0%,#d1fae5 100%); border-top-color:#10b981; color:#065f46; }
     .admin-card-red { background:linear-gradient(145deg,#fff1f2 0%,#fecdd3 100%); border-top-color:#f43f5e; color:#881337; }
@@ -4000,12 +4824,12 @@ const adminMobileStyles = `
     .admin-mobile-alert { width:100%; min-height:70px; display:flex; align-items:center; gap:11px; position:relative; padding:12px 38px 12px 12px; margin-bottom:9px; border-radius:17px; border:1px solid transparent; text-align:left; font-family:inherit; cursor:pointer; }
     .admin-mobile-alert-icon { width:42px; height:42px; min-width:42px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.75); font-size:21px; }
     .admin-mobile-alert-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
-    .admin-mobile-alert-text strong { font-size:14px; line-height:1.2; }
-    .admin-mobile-alert-text span { font-size:12px; opacity:.78; line-height:1.25; }
+    .admin-mobile-alert-text strong { font-size:16px; line-height:1.22; }
+    .admin-mobile-alert-text span { font-size:14px; opacity:.78; line-height:1.3; }
     .admin-mobile-alert .admin-mobile-arrow { right:10px; bottom:22px; font-size:22px; }
     .admin-mobile-alert-warning { background:#fff7ed; border-color:#f59e0b; color:#92400e; }
     .admin-mobile-alert-info { background:#eff6ff; border-color:#60a5fa; color:#1e40af; }
-    @media (max-width:390px) { .admin-mobile-grid{gap:9px;} .admin-mobile-card{min-height:178px;padding:16px 13px 14px;} .admin-mobile-card-title{font-size:15px;} .admin-mobile-card-value{font-size:22px;} .admin-mobile-card-subtitle{font-size:11.5px;} .admin-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .admin-mobile-hola{font-size:20px;} .admin-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:31px;} .admin-mobile-section-title{font-size:18px;} .admin-mobile-subsection-title{font-size:15px;} .admin-mobile-account-card{padding:13px 14px 13px 12px;} .admin-mobile-account-content{padding-right:78px;} .admin-mobile-account-title{font-size:15px;} .admin-mobile-account-subtitle{font-size:11.5px;} .admin-mobile-account-action{right:12px;bottom:12px;font-size:13px;} }
+    @media (max-width:390px) { .admin-mobile-grid{gap:9px;} .admin-mobile-card{min-height:178px;padding:16px 13px 14px;} .admin-mobile-card-title{font-size:18px;} .admin-mobile-card-value{font-size:23px;} .admin-mobile-card-subtitle{font-size:14px;} .admin-mobile-icon{width:50px;height:50px;min-width:50px;font-size:24px;} .admin-mobile-hola{font-size:20px;} .admin-mobile-avatar{width:60px;height:60px;min-width:60px;font-size:31px;} .admin-mobile-section-title{font-size:19px;} .admin-mobile-subsection-title{font-size:16px;} .admin-mobile-account-card{padding:13px 14px 13px 12px;} .admin-mobile-account-content{padding-right:78px;} .admin-mobile-account-title{font-size:17.5px;} .admin-mobile-account-subtitle{font-size:14px;} .admin-mobile-account-action{right:12px;bottom:12px;font-size:13px;} }
   }
 `;
 

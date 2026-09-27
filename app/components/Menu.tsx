@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 
@@ -17,6 +17,14 @@ export default function Menu() {
     usePathname();
     const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
     const [condominioNombre, setCondominioNombre] = useState("");
+    const [codigoViviendaMenu, setCodigoViviendaMenu] = useState("");
+    const [fotoPerfilVista, setFotoPerfilVista] = useState("");
+    const [fotoPerfilGuardando, setFotoPerfilGuardando] = useState(false);
+    const [camaraAbierta, setCamaraAbierta] = useState(false);
+    const [mensajeCamara, setMensajeCamara] = useState("");
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const streamCamaraRef = useRef<MediaStream | null>(null);
+    const inputArchivoRef = useRef<HTMLInputElement | null>(null);
     useEffect(() => {
   setMenuMovilAbierto(false);
 }, [pathname]);
@@ -28,23 +36,300 @@ export default function Menu() {
       .toUpperCase()
       .trim();
   useEffect(() => {
-    const cargarCondominioTecnico = async () => {
-      if (rol !== "TECNICO" || !usuario?.condominio_id) {
+    const cargarDatosIdentidad = async () => {
+      if (!usuario?.condominio_id) {
         setCondominioNombre("");
+        setCodigoViviendaMenu("");
         return;
       }
 
-      const { data } = await supabase
+      const { data: condominioData } = await supabase
         .from("condominios")
         .select("nombre")
         .eq("id", usuario.condominio_id)
         .single();
 
-      setCondominioNombre(data?.nombre || "");
+      setCondominioNombre(condominioData?.nombre || "");
+
+      if (rol === "RESIDENTE" && usuario?.id) {
+        const { data: viviendaData } = await supabase
+          .from("viviendas")
+          .select("codigo_vivienda")
+          .eq("residente_id", usuario.id)
+          .eq("condominio_id", usuario.condominio_id)
+          .maybeSingle();
+
+        setCodigoViviendaMenu(viviendaData?.codigo_vivienda || "");
+      } else {
+        setCodigoViviendaMenu("");
+      }
     };
 
-    cargarCondominioTecnico();
-  }, [rol, usuario?.condominio_id]);
+    cargarDatosIdentidad();
+  }, [rol, usuario?.condominio_id, usuario?.id]);
+
+  const detenerCamara = () => {
+    streamCamaraRef.current?.getTracks().forEach((track) => track.stop());
+    streamCamaraRef.current = null;
+    setCamaraAbierta(false);
+    setMensajeCamara("");
+  };
+
+  useEffect(() => {
+    return () => {
+      streamCamaraRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const guardarFotoEnSupabase = async (archivo: File) => {
+    setFotoPerfilGuardando(true);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        alert("No se pudo verificar la sesión para guardar la foto.");
+        return false;
+      }
+
+      const formData = new FormData();
+      formData.append("foto", archivo);
+
+      const response = await fetch("/api/usuarios/perfil-foto", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const resultado = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        alert(
+          resultado?.error ||
+            "No se pudo guardar la foto de perfil."
+        );
+        return false;
+      }
+
+      if (resultado?.signedUrl) {
+        setFotoPerfilVista(resultado.signedUrl);
+      }
+
+      return true;
+    } catch (error) {
+      console.error("ERROR GUARDANDO FOTO DE PERFIL:", error);
+      alert("No se pudo guardar la foto de perfil.");
+      return false;
+    } finally {
+      setFotoPerfilGuardando(false);
+    }
+  };
+
+  const procesarArchivoFoto = async (archivo: File) => {
+    if (!archivo.type.startsWith("image/")) {
+      alert("Selecciona una imagen para la foto de perfil.");
+      return;
+    }
+
+    if (archivo.size <= 0 || archivo.size > 8 * 1024 * 1024) {
+      alert("La imagen debe tener un tamaño entre 1 byte y 8 MB.");
+      return;
+    }
+
+    const lector = new FileReader();
+
+    lector.onload = async () => {
+      setFotoPerfilVista(String(lector.result || ""));
+      await guardarFotoEnSupabase(archivo);
+    };
+
+    lector.readAsDataURL(archivo);
+  };
+
+  const cargarFotoPerfilGuardada = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        return;
+      }
+
+      const response = await fetch("/api/usuarios/perfil-foto", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const resultado = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        console.warn(
+          "NO SE PUDO CARGAR FOTO DE PERFIL:",
+          resultado?.error || response.status
+        );
+        return;
+      }
+
+      if (resultado?.signedUrl) {
+        setFotoPerfilVista(resultado.signedUrl);
+      }
+    } catch (error) {
+      console.warn("ERROR CARGANDO FOTO DE PERFIL:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!usuario?.id) {
+      setFotoPerfilVista("");
+      return;
+    }
+
+    cargarFotoPerfilGuardada();
+  }, [usuario?.id]);
+
+  const manejarFotoPerfil = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0];
+
+    if (!archivo) {
+      return;
+    }
+
+    void procesarArchivoFoto(archivo);
+    event.target.value = "";
+  };
+
+  const abrirSelectorArchivo = async () => {
+    try {
+      if ("showOpenFilePicker" in window) {
+        const selector = (window as Window & {
+          showOpenFilePicker?: (options?: {
+            multiple?: boolean;
+            types?: Array<{
+              description?: string;
+              accept: Record<string, string[]>;
+            }>;
+            startIn?: string;
+          }) => Promise<any[]>;
+        }).showOpenFilePicker;
+
+        if (selector) {
+          const [handle] = await selector({
+            multiple: false,
+            startIn: "pictures",
+            types: [
+              {
+                description: "Imágenes",
+                accept: {
+                  "image/*": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+                },
+              },
+            ],
+          });
+
+          const archivo = await handle.getFile();
+          procesarArchivoFoto(archivo);
+          return;
+        }
+      }
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+    }
+
+    inputArchivoRef.current?.click();
+  };
+
+  const abrirCamara = async () => {
+    setMensajeCamara("");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      await abrirSelectorArchivo();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+
+      streamCamaraRef.current = stream;
+      setCamaraAbierta(true);
+
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => undefined);
+        }
+      });
+    } catch (error: any) {
+      const nombreError = error?.name || "";
+
+      if (
+        nombreError === "NotAllowedError" ||
+        nombreError === "SecurityError" ||
+        nombreError === "NotFoundError" ||
+        nombreError === "NotReadableError" ||
+        nombreError === "OverconstrainedError" ||
+        nombreError === "TypeError"
+      ) {
+        setMensajeCamara("No se pudo utilizar la cámara. Abriendo selector de imágenes…");
+        await abrirSelectorArchivo();
+        setMensajeCamara("");
+        return;
+      }
+
+      await abrirSelectorArchivo();
+    }
+  };
+
+  const tomarFoto = () => {
+    const video = videoRef.current;
+    const stream = streamCamaraRef.current;
+
+    if (!video || !stream || video.readyState < 2) {
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+
+    const contexto = canvas.getContext("2d");
+
+    if (!contexto) {
+      detenerCamara();
+      return;
+    }
+
+    contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        detenerCamara();
+        alert("No se pudo preparar la foto tomada.");
+        return;
+      }
+
+      const archivo = new File(
+        [blob],
+        `perfil-${Date.now()}.jpg`,
+        { type: "image/jpeg" }
+      );
+
+      detenerCamara();
+      await procesarArchivoFoto(archivo);
+    }, "image/jpeg", 0.9);
+  };
 
 
   // 🔧 ÍCONO TÉCNICO
@@ -240,13 +525,13 @@ transform: "translateX(0)",
       }}
     >
 
-      {/* 🔥 LOGO */}
+      {/* 🔥 LOGO RENALIX */}
 
       <div
         style={{
           display: "flex",
-          alignItems:
-            "center",
+          alignItems: "center",
+          justifyContent: "flex-start",
           gap: 12,
           marginBottom: 22,
         }}
@@ -254,48 +539,40 @@ transform: "translateX(0)",
 
         <div
           style={{
-            width: 52,
-            height: 52,
-
-            borderRadius:
-              16,
-
-            background:
-              "linear-gradient(135deg,#2563eb,#4f46e5)",
-
+            width: 210,
+            maxWidth: "100%",
             display: "flex",
-
-            justifyContent:
-              "center",
-
-            alignItems:
-              "center",
-
-            fontSize: 22,
-
-            color:
-              "#fff",
-
-            fontWeight:
-              "bold",
-
-            boxShadow:
-              "0 10px 24px rgba(79,70,229,0.28)",
+            alignItems: "center",
+            justifyContent: "flex-start",
           }}
         >
-          RX
+
+          <img
+            src="/branding/renalix-horizontal.png"
+            alt="RENALIX - Tu Urbanización en Orden"
+            style={{
+              width: "100%",
+              height: "auto",
+              maxHeight: 86,
+              objectFit: "contain",
+              display: "block",
+            }}
+          />
+
         </div>
 
-        <div>
+        <div
+          style={{
+            display: "none",
+          }}
+        >
 
           <h2
             style={{
               margin: 0,
               fontSize: 21,
-              color:
-                "#111827",
-              fontWeight:
-                "bold",
+              color: "#111827",
+              fontWeight: "bold",
             }}
           >
             RENALIX
@@ -305,31 +582,36 @@ transform: "translateX(0)",
             style={{
               margin: 0,
               marginTop: 2,
-              color:
-                "#6b7280",
+              color: "#6b7280",
               fontSize: 11,
             }}
           >
-            Smart Residential ERP
+            TU URBANIZACIÓN EN ORDEN · Administración · Comunidad · Seguridad
           </p>
 
         </div>
 
       </div>
 
+
+
+
+
+
+
+
+
+
       {/* 🔥 PERFIL */}
 
       <div
+        className="renalix-perfil-card"
         style={{
           background:
             "linear-gradient(135deg,#eff6ff,#eef2ff)",
-
           borderRadius: 18,
-
           padding: 14,
-
           marginBottom: 18,
-
           border:
             "1px solid #dbeafe",
         }}
@@ -338,111 +620,176 @@ transform: "translateX(0)",
         <div
           style={{
             display: "flex",
-            alignItems:
-              "center",
+            alignItems: "center",
             gap: 12,
           }}
         >
 
-          <div
+          <button
+            type="button"
+            className="renalix-perfil-foto"
+            onClick={abrirCamara}
+            disabled={fotoPerfilGuardando}
+            title={
+              fotoPerfilGuardando
+                ? "Guardando foto de perfil…"
+                : "Tomar foto con la cámara o seleccionar una imagen"
+            }
+            aria-label={
+              fotoPerfilGuardando
+                ? "Guardando foto de perfil"
+                : "Tomar foto con la cámara o seleccionar una imagen"
+            }
             style={{
-              width: 44,
-              height: 44,
-
-              borderRadius:
-                "50%",
-
+              position: "relative",
+              width: 56,
+              height: 56,
+              minWidth: 56,
+              borderRadius: "50%",
+              overflow: "hidden",
               background:
                 "linear-gradient(135deg,#2563eb,#4f46e5)",
-
               display: "flex",
-
-              justifyContent:
-                "center",
-
-              alignItems:
-                "center",
-
-              color:
-                "#fff",
-
-              fontSize: 18,
-
-              fontWeight:
-                "bold",
+              justifyContent: "center",
+              alignItems: "center",
+              color: "#fff",
+              fontSize: 22,
+              fontWeight: "bold",
+              cursor: fotoPerfilGuardando ? "wait" : "pointer",
+              opacity: fotoPerfilGuardando ? 0.8 : 1,
+              boxShadow: "0 6px 14px rgba(79,70,229,0.22)",
+              border: "2px solid rgba(255,255,255,0.88)",
             }}
           >
-            👤
-          </div>
+            {fotoPerfilVista ? (
+              <img
+                src={fotoPerfilVista}
+                alt="Foto de perfil"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <span aria-hidden="true">👤</span>
+            )}
 
-          <div>
+            <span
+              style={{
+                position: "absolute",
+                right: 0,
+                bottom: 0,
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "#ffffff",
+                color: "#2563eb",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                fontSize: 11,
+                boxShadow: "0 2px 8px rgba(15,23,42,0.18)",
+              }}
+            >
+              📷
+            </span>
+
+            {fotoPerfilGuardando && (
+              <span
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(15,23,42,0.38)",
+                  color: "#ffffff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
+              >
+                …
+              </span>
+            )}
+
+          </button>
+
+          <input
+            ref={inputArchivoRef}
+            type="file"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+            onChange={manejarFotoPerfil}
+            style={{ display: "none" }}
+          />
+
+          <div
+            style={{
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
 
             <div
               style={{
-                fontWeight:
-                  "bold",
-
-                color:
-                  "#111827",
-
-                fontSize: 14,
+                fontWeight: "bold",
+                color: "#111827",
+                fontSize: 15,
+                lineHeight: 1.2,
               }}
             >
-              {usuario?.nombre ||
-                "Usuario"}
+              {usuario?.nombre || "Usuario"}
             </div>
 
             <div
               style={{
-                color:
-                  "#4f46e5",
-
+                color: "#4f46e5",
                 fontSize: 12,
-
-                marginTop: 2,
-
-                fontWeight:
-                  600,
+                marginTop: 3,
+                fontWeight: 600,
+                lineHeight: 1.25,
               }}
             >
-
-              {rol ===
-                "SUPER_ADMIN" &&
-                "👑 Super Admin"}
-
-              {rol ===
-                "ADMIN" &&
-                "⚙️ Administrador"}
-
-              {rol ===
-                "GUARDIA" &&
-                "🛡️ Guardia"}
-
-              {rol ===
-                "RESIDENTE" &&
-                "🏠 Residente"}
-
+              {rol === "SUPER_ADMIN" && "👑 Super Admin"}
+              {rol === "ADMIN" && "⚙️ Administrador"}
+              {rol === "GUARDIA" && "🛡️ Guardia"}
+              {rol === "RESIDENTE" && "🏠 Residente"}
               {rol === "DIRECTIVA" &&
-  `🏛️ Directiva · ${
-    usuario?.cargo_directiva || "Cargo no definido"
-  }`}
-
+                `🏛️ Directiva · ${
+                  usuario?.cargo_directiva || "Cargo no definido"
+                }`}
               {rol === "TECNICO" && "🔧 Técnico"}
-
-              {rol === "TECNICO" && condominioNombre && (
-                <div
-                  style={{
-                    marginTop: 3,
-                    color: "#64748b",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  🏘️ {condominioNombre}
-                </div>
-              )}
-
             </div>
+
+            {condominioNombre && (
+              <div
+                style={{
+                  marginTop: 5,
+                  color: "#475569",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  lineHeight: 1.25,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                🌐 {condominioNombre}
+              </div>
+            )}
+
+            {codigoViviendaMenu && (
+              <div
+                style={{
+                  marginTop: 4,
+                  color: "#475569",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  lineHeight: 1.25,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                🏠 {codigoViviendaMenu}
+              </div>
+            )}
 
           </div>
 
@@ -871,10 +1218,165 @@ transform: "translateX(0)",
 
         </aside>
 
+    {camaraAbierta && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tomar foto de perfil"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2000,
+          background: "rgba(15,23,42,0.78)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            width: "min(92vw, 720px)",
+            background: "#ffffff",
+            borderRadius: 20,
+            padding: 16,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <strong style={{ color: "#111827", fontSize: 17 }}>
+              📷 Tomar foto de perfil
+            </strong>
+
+            <button
+              type="button"
+              onClick={detenerCamara}
+              style={{
+                border: "none",
+                background: "#f3f4f6",
+                color: "#374151",
+                borderRadius: 10,
+                width: 38,
+                height: 38,
+                cursor: "pointer",
+                fontSize: 18,
+              }}
+              aria-label="Cerrar cámara"
+              title="Cerrar cámara"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              aspectRatio: "4 / 3",
+              background: "#111827",
+              borderRadius: 16,
+              overflow: "hidden",
+            }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
+
+          {mensajeCamara && (
+            <p
+              style={{
+                margin: "12px 0 0",
+                fontSize: 13,
+                color: "#475569",
+                textAlign: "center",
+              }}
+            >
+              {mensajeCamara}
+            </p>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 10,
+              marginTop: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={tomarFoto}
+              style={{
+                border: "none",
+                borderRadius: 12,
+                padding: "12px 18px",
+                background: "linear-gradient(135deg,#2563eb,#4f46e5)",
+                color: "#fff",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: 14,
+              }}
+            >
+              📸 Tomar foto
+            </button>
+
+            <button
+              type="button"
+              onClick={detenerCamara}
+              style={{
+                border: "1px solid #d1d5db",
+                borderRadius: 12,
+                padding: "12px 18px",
+                background: "#ffffff",
+                color: "#374151",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: 14,
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <style jsx>{`
       .renalix-menu {
         transform: translateX(0);
         transition: transform 0.25s ease;
+      }
+
+      .renalix-perfil-foto {
+        -webkit-tap-highlight-color: transparent;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        appearance: none;
+      }
+
+      .renalix-perfil-foto:hover {
+        transform: scale(1.03);
+        transition: transform 0.15s ease;
       }
 
       .boton-menu-movil {

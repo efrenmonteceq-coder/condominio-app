@@ -127,21 +127,53 @@ export default function PanelTecnico() {
         <div className="panel-tecnico-mobile">
           <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "18px 16px 30px" }}>
             <div style={{ maxWidth: 680, margin: "0 auto" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22, paddingTop: 6 }}>
+              <div style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 22,
+                padding: "10px 8px",
+                background: "#ffffff",
+                border: "1px solid #e5e7eb",
+                borderRadius: 20,
+                boxShadow: "0 8px 24px rgba(15,23,42,.08)",
+                overflow: "hidden",
+              }}>
                 <div style={{
-                  width: 48, height: 48, borderRadius: "50%",
-                  background: "linear-gradient(135deg,#2563eb,#4f46e5)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#fff", fontWeight: 800, fontSize: 18, flexShrink: 0,
-                }}>RX</div>
+                  width: 108,
+                  minWidth: 108,
+                  height: 54,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "transparent",
+                  flexShrink: 0,
+                }}>
+                  <img
+                    src="/branding/renalix-horizontal.png"
+                    alt="RENALIX"
+                    style={{
+                      width: 108,
+                      maxWidth: 108,
+                      height: "auto",
+                      display: "block",
+                    }}
+                  />
+                </div>
+
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>Ecosistema de Servicios</div>
-                  <div style={{ fontSize: 21, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Panel Técnico</div>
-                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
+                  <div style={{ fontSize: 12, color: "#000000", fontWeight: 700 }}>
+                    Ecosistema de Servicios
+                  </div>
+                  <div style={{ fontSize: 21, fontWeight: 800, color: "#000000", lineHeight: 1.15 }}>
+                    Panel Técnico
+                  </div>
+                  <div style={{ fontSize: 13, color: "#000000", marginTop: 3 }}>
                     Bienvenido, <b>{tecnico.nombre}</b>
                   </div>
                   {condominioNombre && (
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4, fontWeight: 600 }}>
+                    <div style={{ fontSize: 12, color: "#000000", marginTop: 4, fontWeight: 600 }}>
                       🏘️ {condominioNombre}
                     </div>
                   )}

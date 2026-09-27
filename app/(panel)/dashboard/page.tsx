@@ -532,9 +532,9 @@ const [limiteGastoAdmin,
         overflow: "hidden",
         padding: 0,
         cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
-        background: "rgba(255,255,255,.14)",
-        border: "1px solid rgba(255,255,255,.18)",
-        color: "#fff",
+        background: "#ffffff",
+        border: "2px solid #dbeafe",
+        color: "#1e3a8a",
         fontSize: 32,
         appearance: "none",
         boxShadow: "0 5px 15px rgba(15,23,42,.16)",
@@ -564,7 +564,7 @@ const [limiteGastoAdmin,
           height: 22,
           borderRadius: "50%",
           background: "#fff",
-          color: "#2563eb",
+          color: "#000000",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -687,7 +687,7 @@ const [limiteGastoAdmin,
               border: "none",
               borderRadius: 12,
               padding: "12px 18px",
-              background: "linear-gradient(135deg,#2563eb,#4f46e5)",
+              background: "linear-gradient(135deg,#000000,#4f46e5)",
               color: "#fff",
               fontWeight: 700,
               cursor: guardandoFotoPerfilMovil ? "wait" : "pointer",
@@ -1774,7 +1774,7 @@ if (rol === "RESIDENTE") {
         <div
           style={{
             background:
-              "linear-gradient(135deg,#2563eb,#1d4ed8)",
+              "linear-gradient(135deg,#000000,#1d4ed8)",
             borderRadius: 28,
             padding: "35px 40px",
             marginBottom: 30,
@@ -1858,7 +1858,7 @@ if (rol === "RESIDENTE") {
                   ? "Total que tienes pendiente de pago."
                   : "No tienes saldo pendiente."
               }
-              color="#16a34a"
+              color="#000000"
             />
 
             <IndicadorResumenResidente
@@ -1873,7 +1873,7 @@ if (rol === "RESIDENTE") {
                   ? `Vence: ${String(resumenPersonalResidente.proximaAlicuota.fecha_vencimiento || "Sin fecha").slice(0, 10)}`
                   : "No tienes alícuotas pendientes."
               }
-              color="#2563eb"
+              color="#000000"
             />
 
             <IndicadorResumenResidente
@@ -1937,7 +1937,7 @@ if (rol === "RESIDENTE") {
         >
           <CardPremiumInteractiva
             titulo="💰 Estado de Cuenta"
-            color="#16a34a"
+            color="#000000"
             detalle="Consulta tu saldo, alícuotas y movimientos."
             onClick={() =>
               router.push("/estado-cuenta")
@@ -1946,7 +1946,7 @@ if (rol === "RESIDENTE") {
 
           <CardPremiumInteractiva
             titulo="📄 Mis Comprobantes"
-            color="#2563eb"
+            color="#000000"
             detalle="Consulta tus alícuotas, registra tus pagos y revisa tus comprobantes."
             onClick={() =>
               router.push("/pagos")
@@ -2007,7 +2007,7 @@ if (rol === "RESIDENTE") {
             <CardPremium
               titulo="🏠 Ingresos por alícuotas"
               valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
-              color="#16a34a"
+              color="#000000"
               compact
             />
 
@@ -2037,7 +2037,7 @@ if (rol === "RESIDENTE") {
               valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
               color={
                 transparenciaSeleccionada.resultado >= 0
-                  ? "#16a34a"
+                  ? "#000000"
                   : "#dc2626"
               }
               compact
@@ -2049,7 +2049,7 @@ if (rol === "RESIDENTE") {
                 transparenciaSeleccionada.saldoAcumulado -
                 transparenciaSeleccionada.resultado
               ).toFixed(2)}`}
-              color="#2563eb"
+              color="#000000"
               compact
             />
 
@@ -2143,13 +2143,42 @@ if (rol === "RESIDENTE") {
         <div
           className="residente-mobile-header"
           style={{
-            background: "linear-gradient(135deg, #0f766e 0%, #0f766e 48%, #155e75 100%)",
+            background: "#ffffff",
             position: "relative",
             overflow: "hidden",
+            color: "#0f172a",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 8px 24px rgba(15,23,42,.08)",
           }}
         >
-          <div className="residente-mobile-header-glow" />
-          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media (max-width: 680px) {
+              .residente-mobile .residente-mobile-header-glow { display: none !important; }
+              .residente-mobile .residente-mobile-saludo {
+                align-items: center !important;
+                gap: 12px !important;
+                padding-right: 112px !important;
+              }
+              .residente-mobile .residente-mobile-header-info {
+                min-width: 0 !important;
+                flex: 1 !important;
+              }
+              .residente-mobile .residente-mobile-hola {
+                color: #000000 !important;
+                font-weight: 800 !important;
+                font-size: 19px !important;
+                line-height: 1.2 !important;
+                margin-bottom: 7px !important;
+              }
+              .residente-mobile .residente-mobile-condominio,
+              .residente-mobile .residente-mobile-vivienda {
+                color: #000000 !important;
+                font-size: 14px !important;
+                line-height: 1.35 !important;
+              }
+            }
+          ` }} />
+          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
 
           <div className="residente-mobile-saludo">
             {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
@@ -2840,7 +2869,7 @@ if (rol === "RESIDENTE") {
               <CardPremium
                 titulo="🚗 Control de Acceso"
                 valor="Gestionar"
-                color="#2563eb"
+                color="#000000"
                 onClick={() =>
                   router.push("/visitas")
                 }
@@ -2858,7 +2887,7 @@ if (rol === "RESIDENTE") {
               <CardPremium
                 titulo="🛡️ Rondas de Vigilancia"
                 valor="Gestionar"
-                color="#16a34a"
+                color="#000000"
                 onClick={() =>
                   router.push("/rondas-guardia")
                 }
@@ -2971,7 +3000,7 @@ if (rol === "RESIDENTE") {
               <CardPremium
                 titulo="🚗 Visitas hoy"
                 valor={visitasHoy}
-                color="#2563eb"
+                color="#000000"
                 onClick={() =>
                   router.push("/visitas")
                 }
@@ -3013,7 +3042,7 @@ if (rol === "RESIDENTE") {
         <div className="guardia-mobile">
           <div className="guardia-mobile-header">
             <div className="guardia-mobile-header-glow" />
-            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
+            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
             <div className="guardia-mobile-saludo">
               {renderAvatarPerfilMovil("🛡️", "Cambiar foto de perfil")}
               <div className="guardia-mobile-header-info">
@@ -3264,7 +3293,7 @@ if (rol === "DIRECTIVA") {
       <div
         style={{
           background:
-            "linear-gradient(135deg,#1e3a8a,#2563eb)",
+            "linear-gradient(135deg,#1e3a8a,#000000)",
           borderRadius: 28,
           padding: "35px 40px",
           marginBottom: 30,
@@ -3468,7 +3497,7 @@ if (rol === "DIRECTIVA") {
           <CardPremium
             titulo="🏠 Ingresos por alícuotas"
             valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
-            color="#16a34a"
+            color="#000000"
           />
 
           <CardPremium
@@ -3500,7 +3529,7 @@ if (rol === "DIRECTIVA") {
             valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
             color={
               transparenciaSeleccionada.resultado >= 0
-                ? "#16a34a"
+                ? "#000000"
                 : "#dc2626"
             }
           />
@@ -3511,7 +3540,7 @@ if (rol === "DIRECTIVA") {
               transparenciaSeleccionada.saldoAcumulado -
               transparenciaSeleccionada.resultado
             ).toFixed(2)}`}
-            color="#2563eb"
+            color="#000000"
           />
 
           <CardPremium
@@ -3576,7 +3605,7 @@ if (rol === "DIRECTIVA") {
          <CardPremium
   titulo="📝 Sesiones y Acuerdos"
   valor="Gestionar"
-  color="#2563eb"
+  color="#000000"
   onClick={() =>
     router.push("/sesiones-acuerdos")
   }
@@ -3593,7 +3622,7 @@ if (rol === "DIRECTIVA") {
       <div className="directiva-mobile">
         <div className="directiva-mobile-header">
           <div className="directiva-mobile-header-glow" />
-          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
+          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
           <div className="directiva-mobile-saludo">
             {renderAvatarPerfilMovil("🏛️", "Cambiar foto de perfil")}
             <div className="directiva-mobile-header-info">
@@ -3755,7 +3784,7 @@ if (rol === "DIRECTIVA") {
                 style={{
                   color:
                     transparenciaSeleccionadaDirectivaMovil.resultado >= 0
-                      ? "#16a34a"
+                      ? "#000000"
                       : "#dc2626",
                 }}
               >
@@ -3848,7 +3877,7 @@ if (rol === "DIRECTIVA") {
  return (
 
   <>
-        <style dangerouslySetInnerHTML={{ __html: adminMobileStyles }} />
+        <style dangerouslySetInnerHTML={{ __html: renalixMobileHeaderColorRules + adminMobileStyles }} />
 
         {/* ==========================================
             ADMIN - MÓVIL · EXPERIENCIA TIPO APP
@@ -3856,7 +3885,7 @@ if (rol === "DIRECTIVA") {
         <div className="admin-mobile">
           <div className="admin-mobile-header">
             <div className="admin-mobile-header-glow" />
-            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, background: "#fff", borderRadius: 10, padding: 5, boxShadow: "0 4px 12px rgba(15,23,42,.16)" }}><img src="/branding/renalix-logo-oscuro.png" alt="RENALIX" style={{ width: 120, height: "auto", display: "block" }} /></div>
+            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
             <div className="admin-mobile-saludo">
               {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
               <div className="admin-mobile-header-info">
@@ -4430,7 +4459,7 @@ if (rol === "DIRECTIVA") {
             <CardPremium
               titulo="🏠 Ingresos por alícuotas"
               valor={`$${transparenciaSeleccionada.ingresosAlicuotas.toFixed(2)}`}
-              color="#16a34a"
+              color="#000000"
             />
 
             <CardPremium
@@ -4462,7 +4491,7 @@ if (rol === "DIRECTIVA") {
               valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
               color={
                 transparenciaSeleccionada.resultado >= 0
-                  ? "#16a34a"
+                  ? "#000000"
                   : "#dc2626"
               }
             />
@@ -4473,7 +4502,7 @@ if (rol === "DIRECTIVA") {
                 transparenciaSeleccionada.saldoAcumulado -
                 transparenciaSeleccionada.resultado
               ).toFixed(2)}`}
-              color="#2563eb"
+              color="#000000"
             />
 
             <CardPremium
@@ -4634,14 +4663,14 @@ const guardiaMobileStyles = `
   @media (max-width: 680px) {
     .guardia-desktop { display: none !important; }
     .guardia-mobile { display: block; padding: 0 0 28px; }
-    .guardia-mobile-header { position: relative; overflow: hidden; border-radius: 26px; padding: 24px 20px; margin-bottom: 20px; color:#fff; background:linear-gradient(135deg,#111827 0%,#1f2937 52%,#334155 100%); box-shadow:0 10px 28px rgba(15,23,42,.14); }
-    .guardia-mobile-header-glow { position:absolute; width:170px; height:170px; border-radius:50%; right:-55px; top:-75px; background:rgba(59,130,246,.20); filter:blur(4px); }
-    .guardia-mobile-saludo { position:relative; display:flex; align-items:center; gap:14px; }
-    .guardia-mobile-avatar { width:66px; height:66px; min-width:66px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.14); font-size:32px; }
-    .guardia-mobile-header-info { min-width:0; }
-    .guardia-mobile-hola { font-size:22px; font-weight:800; margin-bottom:8px; }
-    .guardia-mobile-condominio,.guardia-mobile-rol { display:flex; align-items:center; gap:6px; font-size:15px; line-height:1.45; color:#e5e7eb; overflow-wrap:anywhere; }
-    .guardia-mobile-rol { margin-top:3px; color:#cbd5e1; }
+    .guardia-mobile-header { position: relative; overflow: hidden; border-radius: 26px; padding: 24px 20px; margin-bottom: 20px; color:#000000; background:#ffffff; box-shadow:0 8px 24px rgba(15,23,42,.08); border:1px solid #e2e8f0; }
+    .guardia-mobile-header-glow { display:none !important; }
+    .guardia-mobile-saludo { position:relative; display:flex; align-items:center; gap:12px; padding-right:112px; }
+    .guardia-mobile-avatar { width:66px; height:66px; min-width:66px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#ffffff; border:2px solid #dbeafe; font-size:32px; }
+    .guardia-mobile-header-info { min-width:0; flex:1; }
+    .guardia-mobile-hola { font-size:19px; font-weight:800; line-height:1.2; margin-bottom:7px; color:#000000 !important; }
+    .guardia-mobile-condominio,.guardia-mobile-rol { display:flex; align-items:center; gap:6px; font-size:14px; line-height:1.35; color:#000000 !important; overflow-wrap:anywhere; }
+    .guardia-mobile-rol { margin-top:3px; color:#000000 !important; }
     .guardia-mobile-section { margin-bottom:20px; }
     .guardia-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 12px; font-size:18px; font-weight:800; color:#111827; }
     .guardia-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
@@ -4683,13 +4712,13 @@ const directivaMobileStyles = `
   @media (max-width: 680px) {
     .directiva-desktop { display: none !important; }
     .directiva-mobile { display: block; padding: 0 0 28px; }
-    .directiva-mobile-header { position: relative; overflow: hidden; border-radius: 26px; padding: 24px 20px; margin-bottom: 20px; color:#fff; background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 55%,#1d4ed8 100%); box-shadow:0 10px 28px rgba(15,23,42,.14); }
-    .directiva-mobile-header-glow { position:absolute; width:170px; height:170px; border-radius:50%; right:-55px; top:-75px; background:rgba(255,255,255,.13); filter:blur(4px); }
-    .directiva-mobile-saludo { position:relative; display:flex; align-items:center; gap:14px; }
-    .directiva-mobile-avatar { width:66px; height:66px; min-width:66px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.16); font-size:32px; }
-    .directiva-mobile-header-info { min-width:0; }
-    .directiva-mobile-hola { font-size:22px; font-weight:800; margin-bottom:8px; }
-    .directiva-mobile-condominio,.directiva-mobile-rol { display:flex; align-items:center; gap:7px; color:#dbeafe; font-size:14px; margin-top:4px; }
+    .directiva-mobile-header { position: relative; overflow: hidden; border-radius: 26px; padding: 24px 20px; margin-bottom: 20px; color:#000000; background:#ffffff; box-shadow:0 8px 24px rgba(15,23,42,.08); border:1px solid #e2e8f0; }
+    .directiva-mobile-header-glow { display:none !important; }
+    .directiva-mobile-saludo { position:relative; display:flex; align-items:center; gap:12px; padding-right:112px; }
+    .directiva-mobile-avatar { width:66px; height:66px; min-width:66px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#ffffff; border:2px solid #dbeafe; font-size:32px; }
+    .directiva-mobile-header-info { min-width:0; flex:1; }
+    .directiva-mobile-hola { font-size:19px; font-weight:800; line-height:1.2; margin-bottom:7px; color:#000000 !important; }
+    .directiva-mobile-condominio,.directiva-mobile-rol { display:flex; align-items:center; gap:7px; color:#000000 !important; font-size:14px; line-height:1.35; margin-top:4px; }
     .directiva-mobile-section { margin-bottom:18px; }
     .directiva-mobile-section-title { font-size:18px; font-weight:800; color:#111827; margin:0 0 10px; }
     .directiva-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -4699,7 +4728,7 @@ const directivaMobileStyles = `
     .directiva-mobile-card-title { font-size:18px; line-height:1.3; font-weight:800; color:#111827; }
     .directiva-mobile-card-value { margin-top:5px; font-size:23px; font-weight:900; color:#1d4ed8; }
     .directiva-mobile-card-subtitle { margin-top:5px; font-size:14.5px; line-height:1.4; color:#64748b; }
-    .directiva-mobile-arrow { position:absolute; right:14px; bottom:13px; font-size:20px; font-weight:800; color:#2563eb; }
+    .directiva-mobile-arrow { position:absolute; right:14px; bottom:13px; font-size:20px; font-weight:800; color:#000000; }
     .directiva-card-green { background:linear-gradient(145deg,#ecfdf5 0%,#d1fae5 100%); border-top:3px solid #10b981; }
     .directiva-card-red { background:linear-gradient(145deg,#fff1f2 0%,#fecdd3 100%); border-top:3px solid #f43f5e; }
     .directiva-card-blue { background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); border-top:3px solid #3b82f6; }
@@ -4721,6 +4750,59 @@ const directivaMobileStyles = `
 `;
 
 // 📱 ESTILOS DE EXPERIENCIA APP PARA ADMIN EN MÓVIL
+const renalixMobileHeaderColorRules = `
+  @media (max-width: 680px) {
+    .residente-mobile .residente-mobile-header,
+    .guardia-mobile .guardia-mobile-header,
+    .directiva-mobile .directiva-mobile-header,
+    .admin-mobile .admin-mobile-header {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border: 1px solid #e2e8f0 !important;
+      box-shadow: 0 8px 24px rgba(15,23,42,.08) !important;
+    }
+
+    .guardia-mobile .guardia-mobile-header-glow,
+    .directiva-mobile .directiva-mobile-header-glow,
+    .admin-mobile .admin-mobile-header-glow {
+      display: none !important;
+    }
+
+    .guardia-mobile .guardia-mobile-saludo,
+    .directiva-mobile .directiva-mobile-saludo,
+    .admin-mobile .admin-mobile-saludo {
+      align-items: center !important;
+      gap: 12px !important;
+      padding-right: 112px !important;
+    }
+
+    .guardia-mobile .guardia-mobile-header-info,
+    .directiva-mobile .directiva-mobile-header-info,
+    .admin-mobile .admin-mobile-header-info {
+      min-width: 0 !important;
+      flex: 1 !important;
+    }
+
+    .guardia-mobile .guardia-mobile-hola,
+    .guardia-mobile .guardia-mobile-condominio,
+    .guardia-mobile .guardia-mobile-rol,
+    .directiva-mobile .directiva-mobile-hola,
+    .directiva-mobile .directiva-mobile-condominio,
+    .directiva-mobile .directiva-mobile-rol,
+    .admin-mobile .admin-mobile-hola,
+    .admin-mobile .admin-mobile-condominio,
+    .admin-mobile .admin-mobile-rol {
+      color: #000000 !important;
+    }
+
+    .guardia-mobile .guardia-mobile-hola,
+    .directiva-mobile .directiva-mobile-hola,
+    .admin-mobile .admin-mobile-hola {
+      font-weight: 800 !important;
+    }
+  }
+`;
+
 const adminMobileStyles = `
   .admin-mobile { display: none; }
   .admin-desktop { display: block; }
@@ -4795,13 +4877,13 @@ const adminMobileStyles = `
     .admin-mobile-section,.admin-mobile-alertas { margin-bottom:18px; }
     .admin-mobile-section-title { display:flex; align-items:center; gap:8px; margin:4px 2px 14px; padding:0 0 9px; font-size:21px; line-height:1.2; font-weight:900; color:#111827; border-bottom:2px solid #dbe3ee; }
     .admin-mobile-subsection-title { display:flex; align-items:center; gap:8px; margin:16px 2px 10px; padding:9px 0 8px; font-size:17px; line-height:1.2; font-weight:850; color:#334155; border-bottom:1px solid #e2e8f0; }
-    .admin-mobile-account-card { width:100%; min-height:96px; display:flex; align-items:center; gap:13px; position:relative; padding:14px 18px 14px 14px; margin:0 0 16px; border:1px solid #bfdbfe; border-top:4px solid #2563eb; border-radius:20px; background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); color:#1e3a8a; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
+    .admin-mobile-account-card { width:100%; min-height:96px; display:flex; align-items:center; gap:13px; position:relative; padding:14px 18px 14px 14px; margin:0 0 16px; border:1px solid #bfdbfe; border-top:4px solid #000000; border-radius:20px; background:linear-gradient(145deg,#eff6ff 0%,#dbeafe 100%); color:#1e3a8a; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }
     .admin-mobile-account-card:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
     .admin-mobile-account-icon { width:50px; height:50px; min-width:50px; border-radius:15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.78); box-shadow:0 5px 14px rgba(15,23,42,.08); font-size:24px; }
     .admin-mobile-account-content { min-width:0; flex:1; padding-right:92px; }
     .admin-mobile-account-title { font-size:19px; line-height:1.24; font-weight:900; color:#1e3a8a; }
     .admin-mobile-account-subtitle { margin-top:4px; font-size:14.5px; line-height:1.4; color:#475569; }
-    .admin-mobile-account-action { position:absolute; right:15px; bottom:15px; font-size:14px; font-weight:900; color:#2563eb; white-space:nowrap; }
+    .admin-mobile-account-action { position:absolute; right:15px; bottom:15px; font-size:14px; font-weight:900; color:#000000; white-space:nowrap; }
     .admin-mobile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     .admin-mobile-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
     .admin-mobile-card { position:relative; min-width:0; min-height:190px; padding:18px 15px 16px; border:none; border-top:3px solid transparent; border-radius:21px; text-align:left; box-shadow:0 7px 20px rgba(15,23,42,.08); cursor:pointer; font-family:inherit; appearance:none; -webkit-tap-highlight-color:transparent; }

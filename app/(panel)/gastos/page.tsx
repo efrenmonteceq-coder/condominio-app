@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import {
+  useRouter,
   useSearchParams
 } from "next/navigation";
 
@@ -21,6 +22,8 @@ function GastosAdministrativosContenido() {
     loading,
     logout,
   } = useAuth();
+
+  const router = useRouter();
 
   const searchParams =
   useSearchParams();
@@ -155,6 +158,14 @@ console.log(
     )
       .toUpperCase()
       .trim();
+
+  // 🔒 PROTECCIÓN DE RUTA
+  // GUARDIA no puede ingresar al módulo de Gastos.
+  useEffect(() => {
+    if (!loading && usuario && rol === "GUARDIA") {
+      router.replace("/dashboard");
+    }
+  }, [loading, usuario, rol, router]);
 
   // 🔥 INIT
 
@@ -354,6 +365,13 @@ async function cargarMontoMaximo() {
 
   const registrarGasto =
     async () => {
+
+      // 🔒 GUARDIA no puede registrar gastos, incluso si intenta ejecutar la acción directamente.
+      if (rol === "GUARDIA") {
+        alert("El usuario GUARDIA no tiene acceso a Gastos Administrativos.");
+        router.replace("/dashboard");
+        return;
+      }
 
       try {
 

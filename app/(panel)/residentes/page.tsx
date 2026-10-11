@@ -156,10 +156,14 @@ export default function Residentes() {
 
           method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+          
+headers: {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${
+    (await supabase.auth.getSession()).data.session?.access_token ?? ""
+  }`,
+},
+
 
          body: JSON.stringify({
 
@@ -205,33 +209,6 @@ export default function Residentes() {
         return;
       }
 
-      const residenteCreado =
-        await supabase
-          .from("usuarios")
-          .select("id")
-          .eq(
-            "identificacion",
-            identificacion.trim()
-          )
-          .single();
-
-      if (
-        viviendaId &&
-        residenteCreado.data
-      ) {
-
-        await supabase
-          .from("viviendas")
-          .update({
-
-            residente_id:
-              residenteCreado.data.id
-
-          })
-          .eq("id", viviendaId);
-
-      }
-
       alert(
         "Residente creado correctamente"
       );
@@ -254,7 +231,7 @@ export default function Residentes() {
 
   };
 
-  // 🔥 EDITAR
+  // 🔥 EDITAR RESIDENTE MEDIANTE API SEGURA
 
   const editarResidente = async (
     residente: any
@@ -265,136 +242,117 @@ export default function Residentes() {
       residente.nombre || ""
     );
 
-    if (nuevoNombre === null) {
-      return;
-    }
+    if (nuevoNombre === null) return;
 
     const nuevoApellido = prompt(
       "Apellido",
       residente.apellido || ""
     );
 
-    if (nuevoApellido === null) {
-      return;
-    }
+    if (nuevoApellido === null) return;
 
     const nuevoEmail = prompt(
       "Email",
       residente.email || ""
     );
 
-    if (nuevoEmail === null) {
-      return;
-    }
+    if (nuevoEmail === null) return;
 
     const nuevoTelefono = prompt(
       "Teléfono",
       residente.telefono || ""
     );
 
-    if (nuevoTelefono === null) {
-      return;
-    }
+    if (nuevoTelefono === null) return;
 
     const nuevaIdentificacion = prompt(
       "Identificación",
       residente.identificacion || ""
     );
 
-    if (
-      nuevaIdentificacion === null
-    ) {
-      return;
+    if (nuevaIdentificacion === null) return;
+
+    try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      if (sessionError || !sessionData.session?.access_token) {
+        alert("Tu sesión ha expirado. Inicia sesión nuevamente.");
+        return;
+      }
+
+      const response = await fetch("/api/usuarios/residente/update", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
+        body: JSON.stringify({
+          residente_id: residente.id,
+          nombre: nuevoNombre.trim(),
+          apellido: nuevoApellido.trim(),
+          email: nuevoEmail.trim(),
+          telefono: nuevoTelefono.trim(),
+          identificacion: nuevaIdentificacion.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        alert(result.error || "Error actualizando residente.");
+        return;
+      }
+
+      await cargarResidentes();
+      alert("Residente actualizado correctamente.");
+    } catch (error) {
+      console.error("Error actualizando residente:", error);
+      alert("No se pudo actualizar el residente. Revisa la conexión e inténtalo nuevamente.");
     }
-
-    const { error } = await supabase
-      .from("usuarios")
-      .update({
-
-        nombre:
-          nuevoNombre.trim(),
-
-        apellido:
-          nuevoApellido.trim(),
-
-        email:
-          nuevoEmail.trim(),
-
-        telefono:
-          nuevoTelefono.trim(),
-
-        identificacion:
-          nuevaIdentificacion.trim(),
-
-      })
-      .eq("id", residente.id);
-
-    if (error) {
-
-      console.error(error);
-
-      alert(
-        "Error actualizando residente"
-      );
-
-      return;
-    }
-
-    alert(
-      "Residente actualizado correctamente"
-    );
-
-    cargarResidentes();
-
   };
 
-  // 🔥 ELIMINAR
+  // 🔥 ELIMINAR RESIDENTE MEDIANTE API SEGURA
 
   const eliminarResidente = async (
     id: string
   ) => {
+    const confirmar = confirm("¿Eliminar residente?");
 
-    const confirmar = confirm(
-      "¿Eliminar residente?"
-    );
+    if (!confirmar) return;
 
-    if (!confirmar) {
-      return;
+    try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      if (sessionError || !sessionData.session?.access_token) {
+        alert("Tu sesión ha expirado. Inicia sesión nuevamente.");
+        return;
+      }
+
+      const response = await fetch("/api/usuarios/residente/delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
+        body: JSON.stringify({ residente_id: id }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        alert(result.error || "No se pudo eliminar el residente.");
+        return;
+      }
+
+      await cargarResidentes();
+      await cargarViviendas();
+      alert("Residente eliminado correctamente.");
+    } catch (error) {
+      console.error("Error eliminando residente:", error);
+      alert("No se pudo eliminar el residente. Revisa la conexión e inténtalo nuevamente.");
     }
-
-    await supabase
-      .from("viviendas")
-      .update({
-
-        residente_id: null
-
-      })
-      .eq("residente_id", id);
-
-    const { error } = await supabase
-      .from("usuarios")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-
-      console.error(error);
-
-      alert(
-        "Error eliminando residente"
-      );
-
-      return;
-    }
-
-    alert(
-      "Residente eliminado"
-    );
-
-    cargarResidentes();
-
-    cargarViviendas();
-
   };
 
   // 🔥 LIMPIAR

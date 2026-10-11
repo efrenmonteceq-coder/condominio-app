@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function SolicitudesGastos() {
   const { usuario } = useAuth();
+  const router = useRouter();
+
+  const rol = (usuario?.rol || "").toUpperCase().trim();
+
+  // 🔒 GUARDIA no tiene acceso a Solicitudes de Gastos.
+  useEffect(() => {
+    if (usuario && rol === "GUARDIA") {
+      router.replace("/dashboard");
+    }
+  }, [usuario, rol, router]);
 
   const [categoria, setCategoria] =
     useState("");
@@ -46,6 +57,12 @@ export default function SolicitudesGastos() {
 
     const enviarSolicitud =
   async () => {
+
+    // 🔒 Protección adicional: GUARDIA no puede crear solicitudes.
+    if (rol === "GUARDIA") {
+      alert("El usuario GUARDIA no tiene acceso a Solicitudes de Gastos.");
+      return;
+    }
 
     const subirArchivo =
   async (
@@ -233,6 +250,7 @@ setCotizacion3(null);
   // 🔥 CARGAR HISTORIAL DE SOLICITUDES
   const cargarSolicitudes = async () => {
 
+    if (rol === "GUARDIA") return;
     if (!usuario?.condominio_id) return;
 
     setCargandoSolicitudes(true);
@@ -265,7 +283,7 @@ setCotizacion3(null);
   // Cargar historial al entrar
   useEffect(() => {
     cargarSolicitudes();
-  }, [usuario?.condominio_id]);
+  }, [usuario?.condominio_id, rol]);
 
   const solicitudesFiltradas = (() => {
 
@@ -300,6 +318,10 @@ setCotizacion3(null);
 
     return coincidencias.slice(0, 2);
   })();
+
+  if (rol === "GUARDIA") {
+    return null;
+  }
 
   return (
 

@@ -41,6 +41,10 @@ const soloHistorial =
     setViviendaId] =
     useState("");
 
+  // Permite a GUARDIA registrar incidencias que no pertenecen a una vivienda.
+  const [novedadGuardia, setNovedadGuardia] =
+    useState(false);
+
   const [descripcion,
     setDescripcion] =
     useState("");
@@ -244,6 +248,23 @@ setNovedades(
 
       cargarViviendas();
 
+      // Mantiene sincronizado el estado entre ADMIN y GUARDIA
+      // aunque ambos tengan abierta la pantalla al mismo tiempo.
+      const actualizarAlVolver = () => {
+        cargarNovedades();
+      };
+
+      window.addEventListener("focus", actualizarAlVolver);
+
+      const intervalo = window.setInterval(() => {
+        cargarNovedades();
+      }, 5000);
+
+      return () => {
+        window.removeEventListener("focus", actualizarAlVolver);
+        window.clearInterval(intervalo);
+      };
+
     }
 
   }, [usuario]);
@@ -315,7 +336,13 @@ if (!residente) {
 
 }
 
-if (!viviendaSeleccionada) {
+// GUARDIA puede registrar una novedad detectada en un área común
+// o espacio general, sin asociarla a una vivienda.
+if (rol === "GUARDIA" && novedadGuardia) {
+  viviendaSeleccionada = "";
+}
+
+if (!viviendaSeleccionada && !(rol === "GUARDIA" && novedadGuardia)) {
 
   alert(
     "Selecciona una vivienda"
@@ -329,8 +356,11 @@ let fotoUrl = "";
 
 if (imagen) {
 
+  const extension =
+    imagen.name.split(".").pop()?.toLowerCase() || "jpg";
+
   const nombreArchivo =
-    `${Date.now()}-${imagen.name}`;
+    `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
   const {
     error: errorUpload
@@ -378,10 +408,14 @@ const {
     {
 
       vivienda_id:
-        viviendaSeleccionada,
+        viviendaSeleccionada || null,
 
       tipo:
-        "GENERAL",
+        novedadGuardia
+          ? rol === "GUARDIA"
+            ? "GUARDIA"
+            : "ADMINISTRATIVA"
+          : "GENERAL",
 
       descripcion:
         descripcion.trim(),
@@ -432,6 +466,7 @@ foto_url:
       );
 
       setViviendaId("");
+      setNovedadGuardia(false);
 
       cargarNovedades();
 
@@ -706,7 +741,7 @@ cargarNovedades();
             }}
           >
 
-            {/* 🔥 VIVIENDA */}
+            {/* 🔥 VIVIENDA / NOVEDAD DE GUARDIA */}
 
 {rol !== "RESIDENTE" && (
 
@@ -714,60 +749,85 @@ cargarNovedades();
 
     <label
       style={{
-        display:
-          "block",
+        display: "block",
         marginBottom: 8,
-        fontWeight:
-          "bold",
-        color:
-          "#374151",
+        fontWeight: "bold",
+        color: "#374151",
       }}
     >
-      Vivienda
+      Ubicación de la novedad
     </label>
 
-    <select
-      value={
-        viviendaId
-      }
-      onChange={(e) =>
-        setViviendaId(
-          e.target.value
-        )
-      }
-      style={{
-        width: "100%",
-        padding: 14,
-        borderRadius: 14,
-        border:
-          "1px solid #d1d5db",
-        fontSize: 15,
-        outline:
-          "none",
-      }}
-    >
+    {(rol === "GUARDIA" || rol === "ADMIN") && (
+      <select
+        value={novedadGuardia ? "GENERAL" : "VIVIENDA"}
+        onChange={(e) => {
+          const esGeneral = e.target.value === "GENERAL";
+          setNovedadGuardia(esGeneral);
+          if (esGeneral) setViviendaId("");
+        }}
+        style={{
+          width: "100%",
+          padding: 14,
+          borderRadius: 14,
+          border: "1px solid #d1d5db",
+          fontSize: 15,
+          outline: "none",
+          marginBottom: 12,
+        }}
+      >
+        <option value="VIVIENDA">
+          Novedad relacionada con una vivienda
+        </option>
+        <option value="GENERAL">
+          {rol === "GUARDIA"
+            ? "Novedad de Guardia / Área común"
+            : "Novedad Administrativa / Área común"}
+        </option>
+      </select>
+    )}
 
-      <option value="">
-        Seleccionar
-        vivienda
-      </option>
+    {!novedadGuardia && (
+      <select
+        value={viviendaId}
+        onChange={(e) => setViviendaId(e.target.value)}
+        style={{
+          width: "100%",
+          padding: 14,
+          borderRadius: 14,
+          border: "1px solid #d1d5db",
+          fontSize: 15,
+          outline: "none",
+        }}
+      >
+        <option value="">Seleccionar vivienda</option>
 
-      {viviendas.map(
-        (v) => (
-
-          <option
-            key={v.id}
-            value={v.id}
-          >
-            {
-              v.codigo_vivienda
-            }
+        {viviendas.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.codigo_vivienda}
           </option>
+        ))}
+      </select>
+    )}
 
-        )
-      )}
-
-    </select>
+    {(rol === "GUARDIA" || rol === "ADMIN") && novedadGuardia && (
+      <div
+        style={{
+          padding: 14,
+          borderRadius: 14,
+          background: "#f0fdf4",
+          border: "1px solid #bbf7d0",
+          color: "#166534",
+          fontWeight: "bold",
+        }}
+      >
+        📍 Se registrará como{" "}
+        {rol === "GUARDIA"
+          ? "novedad general de Guardia"
+          : "novedad administrativa"}
+        , sin asociarla a una vivienda.
+      </div>
+    )}
 
   </div>
 
@@ -895,6 +955,8 @@ cargarNovedades();
   </label>
 
   <input
+    id="foto-evidencia"
+    name="foto-evidencia"
     type="file"
     accept="image/*"
     onChange={(e) => {
@@ -903,15 +965,61 @@ cargarNovedades();
         e.target.files?.[0];
 
       if (archivo) {
-
-        setImagen(
-          archivo
-        );
-
+        setImagen(archivo);
       }
 
     }}
+    style={{
+      position: "absolute",
+      width: 1,
+      height: 1,
+      padding: 0,
+      margin: -1,
+      overflow: "hidden",
+      clip: "rect(0, 0, 0, 0)",
+      whiteSpace: "nowrap",
+      border: 0,
+    }}
   />
+
+  <label
+    htmlFor="foto-evidencia"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      background: "linear-gradient(135deg, #374151, #111827)",
+      color: "#fff",
+      borderRadius: 14,
+      padding: "13px 20px",
+      cursor: "pointer",
+      fontWeight: "bold",
+      fontSize: 15,
+      boxShadow: "0 5px 14px rgba(17,24,39,0.20)",
+      userSelect: "none",
+    }}
+  >
+    📷 {imagen ? "Cambiar fotografía" : "Seleccionar fotografía"}
+  </label>
+
+  {imagen && (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "10px 14px",
+        borderRadius: 12,
+        background: "#ecfdf5",
+        border: "1px solid #bbf7d0",
+        color: "#166534",
+        fontSize: 14,
+        fontWeight: "bold",
+        wordBreak: "break-word",
+      }}
+    >
+      ✅ Archivo seleccionado: {imagen.name}
+    </div>
+  )}
 
 </div>
 
@@ -1090,14 +1198,28 @@ cargarNovedades();
             }}
           >
 
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 24,
-              }}
-            >
-              Listado de novedades
-            </h2>
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 24,
+                }}
+              >
+                Listado de novedades
+              </h2>
+              {rol === "ADMIN" && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    color: "#6b7280",
+                    fontSize: 13,
+                  }}
+                >
+                  Vista administrativa: incluye las novedades registradas
+                  por residentes, guardias y administración de esta urbanización.
+                </div>
+              )}
+            </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ background: "#111827", color: "#fff", padding: "10px 18px", borderRadius: 14, fontWeight: "bold" }}>
@@ -1172,10 +1294,11 @@ cargarNovedades();
                           "#111827",
                       }}
                     >
-                      {
-                        n.tipo ||
-                        "GENERAL"
-                      }
+                      {n.tipo === "GUARDIA"
+                        ? "🛡️ NOVEDAD DE GUARDIA / ÁREA COMÚN"
+                        : n.tipo === "ADMINISTRATIVA"
+                        ? "👨‍💼 NOVEDAD ADMINISTRATIVA / ÁREA COMÚN"
+                        : n.tipo || "GENERAL"}
                     </h3>
 
                     <p
@@ -1280,43 +1403,45 @@ cargarNovedades();
 
                    <div>
 
-  <b>
-    Residente:
-  </b>
-  {" "}
-  {
-    n.residente_nombre ||
-  n.registrado_por ||
-    "-"
-  }
+  <div>
+    <b>
+      {n.tipo === "GUARDIA"
+        ? "Guardia que registra:"
+        : n.tipo === "ADMINISTRATIVA"
+        ? "Administrador que registra:"
+        : "Registrado por:"}
+    </b>
+    {" "}
+    {n.registrado_por || "-"}
+  </div>
 
-</div>
+  <div>
+    <b>
+      {n.tipo === "GUARDIA" || n.tipo === "ADMINISTRATIVA"
+        ? "Ubicación:"
+        : "Vivienda:"}
+    </b>
+    {" "}
+    {n.tipo === "GUARDIA" || n.tipo === "ADMINISTRATIVA"
+      ? "Área común / espacio general"
+      : n.codigo_vivienda || "-"}
+  </div>
 
-<div>
+  {n.tipo !== "GUARDIA" && n.tipo !== "ADMINISTRATIVA" && (
+    <>
+      <div>
+        <b>Residente:</b>
+        {" "}
+        {n.residente_nombre || "-"}
+      </div>
 
-  <b>
-    Vivienda:
-  </b>
-  {" "}
-  {
-    n.codigo_vivienda ||
-  "-"
-  }
-
-</div>
-
-<div>
-
-  <b>
-    Teléfono:
-  </b>
-  {" "}
-  {
-    n.residente_telefono ||
-    "-"
-  }
-
-</div>
+      <div>
+        <b>Teléfono:</b>
+        {" "}
+        {n.residente_telefono || "-"}
+      </div>
+    </>
+  )}
 
 <div>
 
@@ -1333,6 +1458,8 @@ cargarNovedades();
 </div>
 
                   </div>
+
+                </div>
 
                   {n.solucion && (
 

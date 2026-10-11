@@ -15,161 +15,86 @@ export default function LoginPage() {
     useState(false);
 
   const handleLogin = async () => {
-
-    // VALIDAR CAMPOS
-
-    if (!identificacion || !password) {
-
+    if (!identificacion.trim() || !password) {
       alert("Completa todos los campos");
-
       return;
     }
 
     setLoading(true);
 
-    // 🔥 BUSCAR USUARIO POR IDENTIFICACIÓN
-
-    const {
-      data: usuarioDB,
-      error: errorUsuario,
-    } = await supabase
-      .from("usuarios")
-      .select("*")
-      .eq(
-        "identificacion",
-        identificacion.trim()
-      )
-      .single();
-
-    // USUARIO NO EXISTE
-
-    if (
-      errorUsuario ||
-      !usuarioDB
-    ) {
-
-      alert("Usuario no encontrado");
-
-      setLoading(false);
-
-      return;
-    }
-
-    // 🔥 LOGIN REAL EN AUTH
-
-    const {
-      data,
-      error,
-    } = await supabase.auth.signInWithPassword({
-
-      email: usuarioDB.email,
-
-      password,
-
-    });
-
-    // PASSWORD INCORRECTO
-
-    if (error) {
-
-      console.error(
-        "LOGIN ERROR:",
-        error.message
+    try {
+      // 1. Buscar y validar la cuenta desde el servidor.
+      const response = await fetch(
+        "/api/auth/login-identificacion",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            identificacion: identificacion.trim(),
+            password,
+          }),
+        }
       );
 
-      alert(
-        "Contraseña incorrecta"
-      );
+      const resultado = await response.json();
 
+      if (!response.ok) {
+        alert(resultado.error || "No se pudo iniciar sesión.");
+        return;
+      }
+
+      const { session, usuario } = resultado;
+
+      if (
+        !session?.access_token ||
+        !session?.refresh_token ||
+        !usuario?.id ||
+        !usuario?.rol
+      ) {
+        alert("La respuesta de inicio de sesión no es válida.");
+        return;
+      }
+
+      // 2. Establecer la sesión oficial de Supabase en el navegador.
+      const { error: errorSesion } = await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+
+      if (errorSesion) {
+        console.error(
+          "Error estableciendo sesión:",
+          errorSesion.message
+        );
+        alert("No se pudo establecer la sesión. Intenta nuevamente.");
+        return;
+      }
+
+      // 3. Guardar el perfil utilizado por la interfaz de RENALIX.
+      localStorage.removeItem("usuario");
+      localStorage.setItem("usuario", JSON.stringify(usuario));
+
+      // 4. Conservar el flujo de contraseña temporal y las redirecciones.
+      if (usuario.password_temporal === true) {
+        window.location.href = "/cambiar-password";
+        return;
+      }
+
+      if (usuario.rol === "SUPER_ADMIN") {
+        window.location.href = "/superadmin";
+      } else if (usuario.rol === "TECNICO") {
+        window.location.href = "/panel-tecnico";
+      } else {
+        window.location.href = "/dashboard";
+      }
+    } catch (error) {
+      console.error("Error de inicio de sesión:", error);
+      alert("No se pudo conectar con el servidor. Intenta nuevamente.");
+    } finally {
       setLoading(false);
-
-      return;
     }
-
-    // 🔥 OBJETO USUARIO
-
-    const usuario = {
-
-       id: usuarioDB.id,
-
-      nombre:
-        usuarioDB.nombre,
-
-      apellido:
-        usuarioDB.apellido,
-
-      email:
-        usuarioDB.email,
-
-      identificacion:
-        usuarioDB.identificacion,
-
-      rol:
-        usuarioDB.rol,
-
-        cargo_directiva:
-  usuarioDB.cargo_directiva,
-
-      condominio_id:
-        usuarioDB.condominio_id,
-
-      password_temporal:
-        usuarioDB.password_temporal,
-
-    };
-
-    // 🔥 LIMPIAR SESIÓN ANTERIOR
-
-    localStorage.removeItem(
-      "usuario"
-    );
-
-    // 🔥 GUARDAR NUEVO USUARIO
-
-    localStorage.setItem(
-      "usuario",
-      JSON.stringify(usuario)
-    );
-
-
-    // 🔥 PASSWORD TEMPORAL
-
-    if (
-      usuario.password_temporal === true
-    ) {
-
-      window.location.href =
-        "/cambiar-password";
-
-      return;
-    }
-
-    // 🔥 REDIRECCIONES
-
-if (
-  usuario.rol ===
-  "SUPER_ADMIN"
-) {
-
-  window.location.href =
-    "/superadmin";
-
-} else if (
-
-  usuario.rol ===
-  "TECNICO"
-
-) {
-
-  window.location.href =
-    "/panel-tecnico";
-
-} else {
-
-  window.location.href =
-    "/dashboard";
-}
- 
   };
 
   return (
@@ -267,7 +192,8 @@ if (
 
         <input
           type="text"
-          placeholder="Número de identificación"
+          placeholder="Usuario"
+          autoComplete="new-password"
           value={identificacion}
           onChange={(e) =>
             setIdentificacion(e.target.value)
@@ -290,6 +216,7 @@ if (
         <input
           type="password"
           placeholder="Contraseña"
+          autoComplete="new-password"
           value={password}
           onChange={(e) =>
             setPassword(e.target.value)

@@ -186,6 +186,10 @@ const [mensajeEntrega, setMensajeEntrega] =
   if (!usuario) return;
 
   cargarPaquetesPendientes();
+
+  if (rol === "RESIDENTE") {
+    cargarHistorialPaquetes();
+  }
 }, [usuario]);
 
 
@@ -504,9 +508,26 @@ const cargarPaquetesPendientes = async () => {
 
     // RESIDENTE: solamente sus propios paquetes.
     if (rol === "RESIDENTE") {
+      const { data: residenteActual, error: errorResidenteActual } =
+        await supabase
+          .from("residentes")
+          .select("id")
+          .eq("usuario_id", usuario.id)
+          .eq("condominio_id", usuario.condominio_id)
+          .maybeSingle();
+
+      if (errorResidenteActual) {
+        throw errorResidenteActual;
+      }
+
+      if (!residenteActual) {
+        setPaquetesPendientes([]);
+        return;
+      }
+
       queryPendientes = queryPendientes.eq(
         "residente_id",
-        usuario.id
+        residenteActual.id
       );
     }
 
@@ -697,10 +718,26 @@ const cargarHistorialPaquetes = async () => {
 ;
 
     if (rol === "RESIDENTE") {
-      queryHistorial = queryHistorial.eq(
-        "residente_id",
-        usuario.id
-      );
+      const { data: residenteActual, error: errorResidenteActual } =
+        await supabase
+          .from("residentes")
+          .select("id")
+          .eq("usuario_id", usuario.id)
+          .eq("condominio_id", usuario.condominio_id)
+          .maybeSingle();
+
+      if (errorResidenteActual) {
+        throw errorResidenteActual;
+      }
+
+      if (!residenteActual) {
+        setHistorialPaquetes([]);
+        return;
+      }
+
+      queryHistorial = queryHistorial
+        .eq("residente_id", residenteActual.id)
+        .eq("estado", "ENTREGADO");
     }
 
     const {
@@ -1810,6 +1847,107 @@ const registrarPaquete = async () => {
                 </div>
               )}
             </>
+          )}
+
+          {rol === "RESIDENTE" && (
+            <div style={{ marginTop: 24 }}>
+              <div
+                style={{
+                  padding: 20,
+                  borderRadius: 14,
+                  border: "1px solid #dcfce7",
+                  background: "#f0fdf4",
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#166534" }}>
+                  🗂️ Historial de mis paquetes
+                </div>
+                <div style={{ marginTop: 7, color: "#475569" }}>
+                  Aquí aparecerán los paquetes que ya fueron entregados.
+                </div>
+              </div>
+
+              {cargandoHistorial && (
+                <div style={{ padding: 18, background: "#f9fafb", borderRadius: 12, color: "#6b7280" }}>
+                  📦 Cargando historial...
+                </div>
+              )}
+
+              {!cargandoHistorial && historialPaquetes.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", background: "#f9fafb", borderRadius: 12, color: "#6b7280", border: "1px solid #e5e7eb" }}>
+                  📭 No tienes paquetes entregados en el historial.
+                </div>
+              )}
+
+              {!cargandoHistorial && historialPaquetes.length > 0 && (
+                <div style={{ display: "grid", gap: 14 }}>
+                  {historialPaquetes.map((paquete) => (
+                    <div
+                      key={paquete.id}
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 14,
+                        padding: 18,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                        <div style={{ fontSize: 18, fontWeight: 700 }}>
+                          📦 Paquete entregado
+                        </div>
+                        <div style={{ padding: "5px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontSize: 12, fontWeight: 700 }}>
+                          ENTREGADO
+                        </div>
+                      </div>
+
+                      {paquete.empresa_entrega && (
+                        <div style={{ marginTop: 10, color: "#374151" }}>
+                          🚚 {paquete.empresa_entrega}
+                        </div>
+                      )}
+
+                      {paquete.descripcion && (
+                        <div style={{ marginTop: 6, color: "#374151" }}>
+                          📦 {paquete.descripcion}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 8, color: "#374151" }}>
+                        👤 Recibió: {paquete.entregado_a || "No registrado"}
+                      </div>
+
+                      {paquete.relacion_receptor && (
+                        <div style={{ marginTop: 6, color: "#374151" }}>
+                          🤝 Relación: {paquete.relacion_receptor}
+                        </div>
+                      )}
+
+                      {paquete.entregado_identificacion && (
+                        <div style={{ marginTop: 6, color: "#374151" }}>
+                          🪪 Cédula: {paquete.entregado_identificacion}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
+                        🕐 Recepción: {paquete.fecha_recepcion ? new Date(paquete.fecha_recepcion).toLocaleString("es-EC") : "No registrada"}
+                      </div>
+
+                      <div style={{ marginTop: 5, fontSize: 13, color: "#6b7280" }}>
+                        ✅ Entrega: {paquete.fecha_entrega ? new Date(paquete.fecha_entrega).toLocaleString("es-EC") : "No registrada"}
+                      </div>
+
+                      {paquete.observacion && (
+                        <div style={{ marginTop: 8, color: "#6b7280" }}>
+                          📝 {paquete.observacion}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ==================================

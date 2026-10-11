@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 
@@ -16,6 +17,7 @@ export default function Menu() {
   const pathname =
     usePathname();
     const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+    const [seccionesAbiertas, setSeccionesAbiertas] = useState<Record<string, boolean>>({});
     const [condominioNombre, setCondominioNombre] = useState("");
     const [codigoViviendaMenu, setCodigoViviendaMenu] = useState("");
     const [fotoPerfilVista, setFotoPerfilVista] = useState("");
@@ -355,6 +357,86 @@ export default function Menu() {
     </svg>
   );
 
+  // 🔥 SECCIONES DESPLEGABLES
+
+  const alternarSeccion = (seccion: string) => {
+    setSeccionesAbiertas((actuales) => ({
+      ...actuales,
+      [seccion]: !actuales[seccion],
+    }));
+  };
+
+  const Section = ({
+    id,
+    title,
+    children,
+  }: {
+    id: string;
+    title: string;
+    children: ReactNode;
+  }) => {
+    const abierta = !!seccionesAbiertas[id];
+
+    return (
+      <li style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <button
+          type="button"
+          onClick={() => alternarSeccion(id)}
+          aria-expanded={abierta}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            marginTop: 8,
+            marginBottom: abierta ? 4 : 3,
+            padding: "7px 7px",
+            border: "none",
+            borderRadius: 10,
+            background: abierta ? "#f1f5f9" : "transparent",
+            color: "#334155",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 600,
+            letterSpacing: 0.55,
+            textAlign: "left",
+          }}
+        >
+          <span>
+            {String(title).replace(
+              /^(\s*[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]*)([A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(.*)$/,
+              (_, prefijo, letra, resto) =>
+                prefijo + letra.toUpperCase() + resto.toLowerCase()
+            )}
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize: 13,
+              lineHeight: 1,
+              transition: "transform 0.2s ease",
+              transform: abierta ? "rotate(90deg)" : "rotate(0deg)",
+            }}
+          >
+            ▸
+          </span>
+        </button>
+
+        <ul
+          style={{
+            listStyle: "none",
+            padding: abierta ? "0 0 0 18px" : 0,
+            margin: 0,
+            display: abierta ? "block" : "none",
+          }}
+        >
+          {children}
+        </ul>
+      </li>
+    );
+  };
+
   // 🔥 MENU ITEM
 
   const MenuItem = ({
@@ -370,7 +452,7 @@ export default function Menu() {
 
       <li
         style={{
-          marginBottom: 6,
+          marginBottom: 2,
         }}
       >
 
@@ -383,20 +465,20 @@ export default function Menu() {
             alignItems:
               "center",
 
-            gap: 10,
+            gap: 7,
 
             padding:
-              "11px 13px",
+              "5px 9px",
 
-            borderRadius: 14,
+            borderRadius: 12,
 
             textDecoration:
               "none",
 
             fontWeight:
-              600,
+              300,
 
-            fontSize: 14,
+            fontSize: 12,
 
             transition:
               "0.2s",
@@ -413,7 +495,7 @@ export default function Menu() {
 
             boxShadow:
               activo
-                ? "0 8px 18px rgba(79,70,229,0.25)"
+                ? "0 6px 14px rgba(79,70,229,0.20)"
                 : "none",
 
           }}
@@ -421,7 +503,7 @@ export default function Menu() {
 
           <span
             style={{
-              fontSize: 17,
+              fontSize: 10,
             }}
           >
             {icon}
@@ -440,26 +522,7 @@ export default function Menu() {
   };
 
   // 🔥 TITULOS
-
-  const SectionTitle = ({
-    title,
-  }: any) => (
-
-    <div
-      style={{
-        marginTop: 18,
-        marginBottom: 10,
-        paddingLeft: 6,
-        fontSize: 11,
-        fontWeight: "bold",
-        color: "#9ca3af",
-        letterSpacing: 1.2,
-      }}
-    >
-      {title}
-    </div>
-
-  );
+  // Las secciones del menú se manejan con el componente Section.
 
   return (
 
@@ -533,7 +596,7 @@ transform: "translateX(0)",
           alignItems: "center",
           justifyContent: "flex-start",
           gap: 12,
-          marginBottom: 22,
+          marginBottom: 14,
         }}
       >
 
@@ -543,7 +606,7 @@ transform: "translateX(0)",
             maxWidth: "100%",
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-start",
+            justifyContent: "center",
           }}
         >
 
@@ -553,7 +616,7 @@ transform: "translateX(0)",
             style={{
               width: "100%",
               height: "auto",
-              maxHeight: 86,
+              maxHeight: 94,
               objectFit: "contain",
               display: "block",
             }}
@@ -583,7 +646,7 @@ transform: "translateX(0)",
               margin: 0,
               marginTop: 2,
               color: "#6b7280",
-              fontSize: 11,
+              fontSize: 10,
             }}
           >
             TU URBANIZACIÓN EN ORDEN · Administración · Comunidad · Seguridad
@@ -610,8 +673,8 @@ transform: "translateX(0)",
           background:
             "linear-gradient(135deg,#eff6ff,#eef2ff)",
           borderRadius: 18,
-          padding: 14,
-          marginBottom: 18,
+          padding: 10,
+          marginBottom: 14,
           border:
             "1px solid #dbeafe",
         }}
@@ -642,9 +705,9 @@ transform: "translateX(0)",
             }
             style={{
               position: "relative",
-              width: 56,
-              height: 56,
-              minWidth: 56,
+              width: 50,
+              height: 50,
+              minWidth: 50,
               borderRadius: "50%",
               overflow: "hidden",
               background:
@@ -732,10 +795,10 @@ transform: "translateX(0)",
 
             <div
               style={{
-                fontWeight: "bold",
+                fontWeight: 600,
                 color: "#111827",
-                fontSize: 15,
-                lineHeight: 1.2,
+                fontSize: 14.5,
+                lineHeight: 1.15,
               }}
             >
               {usuario?.nombre || "Usuario"}
@@ -744,10 +807,10 @@ transform: "translateX(0)",
             <div
               style={{
                 color: "#4f46e5",
-                fontSize: 12,
-                marginTop: 3,
-                fontWeight: 600,
-                lineHeight: 1.25,
+                fontSize: 11.5,
+                marginTop: 2,
+                fontWeight: 500,
+                lineHeight: 1.2,
               }}
             >
               {rol === "SUPER_ADMIN" && "👑 Super Admin"}
@@ -764,11 +827,11 @@ transform: "translateX(0)",
             {condominioNombre && (
               <div
                 style={{
-                  marginTop: 5,
+                  marginTop: 3,
                   color: "#475569",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  lineHeight: 1.25,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  lineHeight: 1.15,
                   overflowWrap: "anywhere",
                 }}
               >
@@ -779,11 +842,11 @@ transform: "translateX(0)",
             {codigoViviendaMenu && (
               <div
                 style={{
-                  marginTop: 4,
+                  marginTop: 2,
                   color: "#475569",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  lineHeight: 1.25,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  lineHeight: 1.15,
                   overflowWrap: "anywhere",
                 }}
               >
@@ -813,33 +876,31 @@ transform: "translateX(0)",
 
   <>
 
-    <SectionTitle
-      title="GENERAL"
-    />
-
-    <MenuItem
-      href="/dashboard"
-      icon="📊"
-      label="Dashboard"
-    />
-
-    {(rol === "ADMIN" ||
-      rol === "GUARDIA" ||
-      rol === "RESIDENTE") && (
+    <Section id="general" title="🏠 GENERAL">
       <MenuItem
-        href="/avisos"
-        icon="📢"
-        label="Avisos"
+        href="/dashboard"
+        icon="📊"
+        label="Dashboard"
       />
-    )}
 
-    {rol !== "DIRECTIVA" && (
-      <MenuItem
-        href="/novedades"
-        icon="📢"
-        label="Novedades"
-      />
-    )}
+      {(rol === "ADMIN" ||
+        rol === "GUARDIA" ||
+        rol === "RESIDENTE") && (
+        <MenuItem
+          href="/avisos"
+          icon="📢"
+          label="Avisos"
+        />
+      )}
+
+      {rol !== "DIRECTIVA" && (
+        <MenuItem
+          href="/novedades"
+          icon="📢"
+          label="Novedades"
+        />
+      )}
+    </Section>
 
   </>
 
@@ -850,39 +911,37 @@ transform: "translateX(0)",
 {rol === "DIRECTIVA" && (
   <>
 
-    <SectionTitle
-      title="DIRECTIVA"
-    />
+    <Section id="directiva" title="🏛️ DIRECTIVA">
+      <MenuItem
+        href="/finanzas-directiva"
+        icon="💰"
+        label="Finanzas"
+      />
 
-    <MenuItem
-      href="/finanzas-directiva"
-      icon="💰"
-      label="Finanzas"
-    />
+      <MenuItem
+        href="/aprobaciones-directiva"
+        icon="📋"
+        label="Aprobaciones"
+      />
 
-    <MenuItem
-      href="/aprobaciones-directiva"
-      icon="📋"
-      label="Aprobaciones"
-    />
+      <MenuItem
+        href="/configuracion-financiera"
+        icon="⚙️"
+        label="Configuración Financiera"
+      />
 
-    <MenuItem
-    href="/configuracion-financiera"
-    icon="⚙️"
-    label="Configuración Financiera"
-  />
+      <MenuItem
+        href="/sesiones-acuerdos"
+        icon="📝"
+        label="Sesiones y Acuerdos"
+      />
 
-  <MenuItem
-    href="/sesiones-acuerdos"
-    icon="📝"
-    label="Sesiones y Acuerdos"
-  />
-
-  <MenuItem
-    href="/votaciones"
-    icon="🗳️"
-    label="Votaciones"
-  />
+      <MenuItem
+        href="/votaciones"
+        icon="🗳️"
+        label="Votaciones"
+      />
+    </Section>
 
   </>
 )}
@@ -893,27 +952,25 @@ transform: "translateX(0)",
 
   <>
 
-    <SectionTitle
-      title="PANEL TÉCNICO"
-    />
+    <Section id="tecnico" title="🔧 PANEL TÉCNICO">
+      <MenuItem
+        href="/panel-tecnico"
+        icon={<IconoTecnico />}
+        label="Panel Técnico"
+      />
 
-    <MenuItem
-      href="/panel-tecnico"
-      icon={<IconoTecnico />}
-      label="Panel Técnico"
-    />
+      <MenuItem
+        href="/panel-tecnico"
+        icon="🛠️"
+        label="Mis Servicios"
+      />
 
-    <MenuItem
-      href="/panel-tecnico"
-      icon="🛠️"
-      label="Mis Servicios"
-    />
-
-    <MenuItem
-      href="/panel-tecnico/pagos"
-      icon="💳"
-      label="Pagos y Comprobantes"
-    />
+      <MenuItem
+        href="/panel-tecnico/pagos"
+        icon="💳"
+        label="Pagos y Comprobantes"
+      />
+    </Section>
 
   </>
 
@@ -928,44 +985,40 @@ transform: "translateX(0)",
 
           <>
 
-            <SectionTitle
-              title="ADMINISTRACIÓN"
-            />
-
-            <MenuItem
-              href="/viviendas"
-              icon="🏠"
-              label="Viviendas"
-            />
-
-            <MenuItem
-              href="/residentes"
-              icon="👨‍👩‍👧"
-              label="Residentes"
-            />
-
-            {rol === "ADMIN" && (
-
+            <Section id="administracion" title="⚙️ ADMINISTRACIÓN">
               <MenuItem
-                href="/guardias"
-                icon="🛡️"
-                label="Guardias"
+                href="/viviendas"
+                icon="🏠"
+                label="Viviendas"
               />
 
-            )}
+              <MenuItem
+                href="/residentes"
+                icon="👨‍👩‍👧"
+                label="Residentes"
+              />
+
+              {rol === "ADMIN" && (
+                <MenuItem
+                  href="/guardias"
+                  icon="🛡️"
+                  label="Guardias"
+                />
+              )}
+
+              {rol === "ADMIN" && (
+                <MenuItem
+                  href="/directiva"
+                  icon="🏛️"
+                  label="Directiva"
+                />
+              )}
+            </Section>
 
           </>
 
         )}
 
-
-        {rol === "ADMIN" && (
-  <MenuItem
-    href="/directiva"
-    icon="🏛️"
-    label="Directiva"
-  />
-)}
 
         {/* ACCESOS */}
 
@@ -975,58 +1028,47 @@ transform: "translateX(0)",
 
           <>
 
-            <SectionTitle
-              title="CONTROL ACCESOS"
-            />
+            <Section id="accesos" title="🛡️ CONTROL ACCESOS">
+              <MenuItem
+                href="/visitas"
+                icon="🚗"
+                label="Visitas PIN"
+              />
 
-            <MenuItem
-              href="/visitas"
-              icon="🚗"
-              label="Visitas PIN"
-            />
+              <MenuItem
+                href="/tecnicos"
+                icon="🌐"
+                label="Ecosistema de Servicios"
+              />
 
-            <MenuItem
-              href="/tecnicos"
-              icon="🌐"
-              label="Ecosistema de Servicios"
-            />
+              {(
+                rol === "ADMIN" ||
+                rol === "GUARDIA" ||
+                rol === "RESIDENTE"
+              ) && (
+                <>
+                  <MenuItem
+                    href="/activar-por-pagos"
+                    icon="💳"
+                    label="Gestión de Servicios"
+                  />
 
-            {(
-  rol === "ADMIN" ||
-  rol === "GUARDIA" ||
-  rol === "RESIDENTE"
-) && (
+                  {rol === "GUARDIA" && (
+                    <MenuItem
+                      href="/rondas-guardia"
+                      icon="🛡️"
+                      label="Rondas de Vigilancia"
+                    />
+                  )}
 
-  <>
-
-    <MenuItem
-      href="/activar-por-pagos"
-      icon="💳"
-      label="Gestión de Servicios"
-    />
-
-    {rol === "GUARDIA" && (
-      <MenuItem
-        href="/rondas-guardia"
-        icon="🛡️"
-        label="Rondas de Vigilancia"
-      />
-    )}
-
-    {(
-  rol === "ADMIN" ||
-  rol === "GUARDIA" ||
-  rol === "RESIDENTE"
-) && (
-  <MenuItem
-    href="/paqueteria"
-    icon="📦"
-    label="Paquetería"
-  />
-)}
-  </>
-
-)}
+                  <MenuItem
+                    href="/paqueteria"
+                    icon="📦"
+                    label="Paquetería"
+                  />
+                </>
+              )}
+            </Section>
                
           </>
 
@@ -1035,25 +1077,24 @@ transform: "translateX(0)",
         {/* RESERVAS */}
 
         {(rol === "ADMIN" ||
+            rol === "GUARDIA" ||
           rol === "RESIDENTE") && (
 
           <>
 
-            <SectionTitle
-              title="ÁREAS"
-            />
+            <Section id="areas" title="🏊 ÁREAS">
+              <MenuItem
+                href="/areas-comunes"
+                icon="🏊"
+                label="Áreas Comunes"
+              />
 
-            <MenuItem
-              href="/areas-comunes"
-              icon="🏊"
-              label="Áreas Comunes"
-            />
-
-            <MenuItem
-              href="/reservas"
-              icon="📅"
-              label="Reservas"
-            />
+              <MenuItem
+                href="/reservas"
+                icon="📅"
+                label="Reservas"
+              />
+            </Section>
 
           </>
 
@@ -1066,76 +1107,67 @@ transform: "translateX(0)",
 
           <>
 
-            <SectionTitle
-              title="FINANZAS"
-            />
+            <Section id="finanzas" title="💰 FINANZAS">
+              {rol === "ADMIN" && (
+                <>
+                  <MenuItem
+                    href="/pagos"
+                    icon="💰"
+                    label="Gestión Financiera"
+                  />
 
-            {rol === "ADMIN" && (
+                  <MenuItem
+                    href="/votaciones"
+                    icon="🗳️"
+                    label="Votaciones"
+                  />
+                </>
+              )}
 
-            <>
-            <MenuItem
-              href="/pagos"
-              icon="💰"
-              label="Gestión Financiera"
-            />
+              {rol === "RESIDENTE" && (
+                <>
+                  <MenuItem
+                    href="/pagos"
+                    icon="💳"
+                    label="Pago de Alícuotas"
+                  />
 
-            <MenuItem
-              href="/votaciones"
-              icon="🗳️"
-              label="Votaciones"
-            />
-            </>
-            )}
+                  <MenuItem
+                    href="/votaciones"
+                    icon="🗳️"
+                    label="Votaciones"
+                  />
+                </>
+              )}
 
-            {rol === "RESIDENTE" && (
+              <MenuItem
+                href="/estado-cuenta"
+                icon="📄"
+                label="Estado Cuenta"
+              />
 
-              <>
+              <MenuItem
+                href="/gastos"
+                icon="🧾"
+                label="Gastos"
+              />
 
-<MenuItem
-  href="/pagos"
-  icon="💳"
-  label="Pago de Alícuotas"
-/>
+              {rol === "ADMIN" && (
+                <>
+                  <MenuItem
+                    href="/solicitudes-gastos"
+                    icon="📋"
+                    label="Solicitudes Gastos"
+                  />
 
- <MenuItem
-      href="/votaciones"
-      icon="🗳️"
-      label="Votaciones"
-    />
-  </>
-)}
-
-            <MenuItem
-              href="/estado-cuenta"
-              icon="📄"
-              label="Estado Cuenta"
-            />
-
-            <MenuItem
-              href="/gastos"
-              icon="🧾"
-              label="Gastos"
-            />
-
-            {rol === "ADMIN" && (
-
-  <>
-
-    <MenuItem
-      href="/solicitudes-gastos"
-      icon="📋"
-      label="Solicitudes Gastos"
-    />
-
-    <MenuItem
-      href="/solicitudes-aprobadas"
-      icon="✅"
-      label="Solicitudes Aprobadas"
-    />
-
-  </>
-
-)}
+                  <MenuItem
+                    href="/solicitudes-aprobadas"
+                    icon="✅"
+                    label="Solicitudes Aprobadas"
+                  />
+                </>
+              )}
+            </Section>
 
           </>
 
@@ -1147,21 +1179,19 @@ transform: "translateX(0)",
 
           <>
 
-            <SectionTitle
-              title="CONFIG"
-            />
+            <Section id="config" title="⚙️ CONFIG">
+              <MenuItem
+                href="/configuracion"
+                icon="⚙️"
+                label="Configuración"
+              />
 
-            <MenuItem
-              href="/configuracion"
-              icon="⚙️"
-              label="Configuración"
-            />
-
-            <MenuItem
-  href="/sectores-ronda"
-  icon="📍"
-  label="Sectores de Ronda"
-/>
+              <MenuItem
+                href="/sectores-ronda"
+                icon="📍"
+                label="Sectores de Ronda"
+              />
+            </Section>
 
           </>
 
@@ -1186,7 +1216,7 @@ transform: "translateX(0)",
             width: "100%",
 
             padding:
-              "12px 16px",
+              "10px 14px",
 
             background:
               "linear-gradient(135deg,#dc2626,#ef4444)",

@@ -41,6 +41,16 @@ const soloHistorial =
     setResidentes] =
     useState<any[]>([]);
 
+  // 🔥 USUARIOS DEL CONDOMINIO (para trazabilidad de ingreso/salida)
+  const [usuariosCondominio,
+    setUsuariosCondominio] =
+    useState<any[]>([]);
+
+  // 🔥 VIVIENDAS DE RESIDENTES
+  const [viviendas,
+    setViviendas] =
+    useState<any[]>([]);
+
   // 🔥 FILTROS
 
   const [busqueda,
@@ -169,6 +179,10 @@ const [estadoArea,
       cargarAreas();
 
       cargarResidentes();
+
+      cargarUsuariosCondominio();
+
+      cargarViviendas();
 
       cargarReservas();
 
@@ -363,6 +377,32 @@ setEstadoArea(
         data || []
       );
 
+    };
+
+  // 🔥 USUARIOS DEL CONDOMINIO — TRAZABILIDAD
+  const cargarUsuariosCondominio = async () => {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("id,nombre,apellido,rol")
+      .eq("condominio_id", usuario.condominio_id);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setUsuariosCondominio(data || []);
+  };
+
+  // 🔥 VIVIENDAS
+
+  const cargarViviendas = async () => {
+      const { data, error } = await supabase
+        .from("viviendas")
+        .select("id,codigo_vivienda,residente_id,condominio_id")
+        .eq("condominio_id", usuario.condominio_id);
+      if (error) { console.error(error); return; }
+      setViviendas(data || []);
     };
 
   // 🔥 RESERVAS
@@ -592,6 +632,12 @@ const obtenerProximoHorarioDisponible = (
 
   const crearReserva =
     async () => {
+
+      // GUARDIA: solo consulta, nunca puede crear reservas.
+      if (rol === "GUARDIA") {
+        alert("El usuario GUARDIA solo puede consultar reservas.");
+        return;
+      }
 
       if (
         !areaId ||
@@ -965,6 +1011,37 @@ if (
 
     };
 
+  // 🔥 OBTENER VIVIENDA DEL RESIDENTE
+  const obtenerVivienda = (residenteId: string) =>
+    viviendas.find((v) => v.residente_id === residenteId);
+
+  const obtenerUsuarioCondominio = (usuarioId: string) =>
+    usuariosCondominio.find((u) => u.id === usuarioId);
+
+  // 🔥 GUARDIA — CONFIRMAR INGRESO
+  const confirmarIngreso = async (id: string) => {
+    if (rol !== "GUARDIA" || !usuario?.id) return;
+    const { error } = await supabase.from("reservas_areas").update({
+      estado: "EN_USO",
+      ingreso_confirmado_at: new Date().toISOString(),
+      ingreso_confirmado_por: usuario.id,
+    }).eq("id", id).eq("condominio_id", usuario.condominio_id).eq("estado", "RESERVADA");
+    if (error) { console.error(error); alert("No se pudo confirmar el ingreso."); return; }
+    await cargarReservas();
+  };
+
+  // 🔥 GUARDIA — CONFIRMAR SALIDA
+  const confirmarSalida = async (id: string) => {
+    if (rol !== "GUARDIA" || !usuario?.id) return;
+    const { error } = await supabase.from("reservas_areas").update({
+      estado: "FINALIZADA",
+      salida_confirmada_at: new Date().toISOString(),
+      salida_confirmada_por: usuario.id,
+    }).eq("id", id).eq("condominio_id", usuario.condominio_id).eq("estado", "EN_USO");
+    if (error) { console.error(error); alert("No se pudo confirmar la salida."); return; }
+    await cargarReservas();
+  };
+
   // 🔥 LIMPIAR
 
   const limpiar =
@@ -1013,6 +1090,11 @@ setInvitados(0);
               busqueda.toLowerCase()
             );
 
+          const coincideRol =
+            rol === "RESIDENTE"
+              ? r.usuario_id === usuario?.id
+              : true;
+
           const coincideEstado =
             filtroEstado
               ? r.estado ===
@@ -1026,6 +1108,7 @@ setInvitados(0);
               : true;
 
           return (
+            coincideRol &&
             coincideBusqueda &&
             coincideEstado &&
             coincideFecha
@@ -1201,11 +1284,247 @@ const bloquesDisponibles =
 
         </div>
 
+        {/* 🛡️ GUARDIA — PANEL OPERATIVO DE RESERVAS */}
+        {rol === "GUARDIA" && (
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: 24,
+              padding: 24,
+              marginBottom: 30,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+              border: "1px solid #e5e7eb",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                flexWrap: "wrap",
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 24 }}>
+                  🛡️ Control de reservas — Guardia
+                </h2>
+                <p style={{ margin: "6px 0 0", color: "#6b7280", fontSize: 14 }}>
+                  Verifique al residente y confirme ingreso y salida.
+                </p>
+              </div>
+              <div
+                style={{
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                  padding: "9px 14px",
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                {reservasFiltradas.length} reservas
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(240px, 1fr) 190px",
+                gap: 12,
+                marginBottom: 20,
+              }}
+            >
+              <input
+                placeholder="🔎 Buscar residente, área o vivienda..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                style={inputStyle}
+              />
+              <input
+                type="date"
+                value={filtroFecha}
+                onChange={(e) => setFiltroFecha(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            {reservasFiltradas.length === 0 ? (
+              <div
+                style={{
+                  padding: 30,
+                  border: "2px dashed #d1d5db",
+                  borderRadius: 18,
+                  textAlign: "center",
+                  color: "#6b7280",
+                  background: "#f9fafb",
+                }}
+              >
+                No hay reservas que coincidan con la búsqueda.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 14 }}>
+                {reservasFiltradas.map((r) => {
+                  const residente = obtenerResidente(r.usuario_id);
+                  const vivienda = obtenerVivienda(r.usuario_id);
+                  const ingreso = r.ingreso_confirmado_at
+                    ? new Date(r.ingreso_confirmado_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : null;
+                  const salida = r.salida_confirmada_at
+                    ? new Date(r.salida_confirmada_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : null;
+
+                  const estadoBg =
+                    r.estado === "EN_USO"
+                      ? "#f59e0b"
+                      : r.estado === "FINALIZADA"
+                      ? "#6b7280"
+                      : r.estado === "CANCELADA"
+                      ? "#dc2626"
+                      : "#16a34a";
+
+                  return (
+                    <div
+                      key={r.id}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 18,
+                        padding: 18,
+                        background: "#f9fafb",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 20, fontWeight: 800 }}>
+                            {obtenerNombreArea(r.area_id) || "Área común"}
+                          </div>
+                          <div style={{ marginTop: 5, color: "#374151", fontWeight: 700 }}>
+                            {r.fecha} · {r.hora_inicio} — {r.hora_fin}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            background: estadoBg,
+                            color: "#fff",
+                            borderRadius: 999,
+                            padding: "7px 12px",
+                            fontSize: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {r.estado}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                          gap: 10,
+                          marginTop: 14,
+                        }}
+                      >
+                        <Info
+                          label="Residente"
+                          value={`${residente?.nombre || ""} ${residente?.apellido || ""}`.trim() || "No disponible"}
+                        />
+                        <Info
+                          label="Vivienda"
+                          value={vivienda?.codigo_vivienda || "No registrada"}
+                        />
+                        <Info
+                          label="Identificación"
+                          value={residente?.identificacion || "No disponible"}
+                        />
+                        <Info
+                          label="Teléfono"
+                          value={residente?.telefono || "No disponible"}
+                        />
+                        <Info
+                          label="Personas"
+                          value={`${r.total_personas ?? 1} (residentes ${r.residentes_asistentes ?? 1} · invitados ${r.invitados ?? 0})`}
+                        />
+                      </div>
+
+                      {(ingreso || salida) && (
+                        <div
+                          style={{
+                            marginTop: 12,
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            background: "#ffffff",
+                            border: "1px solid #e5e7eb",
+                            fontSize: 13,
+                            color: "#374151",
+                          }}
+                        >
+                          {ingreso && <div>🟢 Ingreso confirmado: <b>{ingreso}</b></div>}
+                          {salida && <div style={{ marginTop: 4 }}>🔴 Salida confirmada: <b>{salida}</b></div>}
+                        </div>
+                      )}
+
+                      {r.estado === "RESERVADA" && (
+                        <button
+                          type="button"
+                          onClick={() => confirmarIngreso(r.id)}
+                          style={{
+                            width: "100%",
+                            marginTop: 14,
+                            background: "#2563eb",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 12,
+                            padding: "13px 16px",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✅ CONFIRMAR INGRESO
+                        </button>
+                      )}
+
+                      {r.estado === "EN_USO" && (
+                        <button
+                          type="button"
+                          onClick={() => confirmarSalida(r.id)}
+                          style={{
+                            width: "100%",
+                            marginTop: 14,
+                            background: "#111827",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 12,
+                            padding: "13px 16px",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                          }}
+                        >
+                          🚪 CONFIRMAR SALIDA
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 🔥 FORMULARIO */}
 
-        {!soloHistorial && (
+        {!soloHistorial && rol !== "GUARDIA" && (
         <div
           style={{
+            display: rol === "GUARDIA" ? "none" : undefined,
             background:
               "#fff",
             borderRadius: 24,
@@ -1845,6 +2164,7 @@ const bloquesDisponibles =
 
         <div
           style={{
+            display: rol === "GUARDIA" ? "none" : undefined,
             background:
               "#fff",
             borderRadius: 24,
@@ -1940,6 +2260,7 @@ const bloquesDisponibles =
 
         <div
           style={{
+            display: rol === "GUARDIA" ? "none" : undefined,
             background:
               "#fff",
             borderRadius: 24,
@@ -2186,6 +2507,93 @@ const bloquesDisponibles =
 />
 
                     </div>
+
+                    {/* 🔥 TRAZABILIDAD DE INGRESO Y SALIDA */}
+                    {(r.ingreso_confirmado_at ||
+                      r.salida_confirmada_at) && (
+                      <div
+                        style={{
+                          marginTop: 20,
+                          padding: 18,
+                          borderRadius: 18,
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 800,
+                            color: "#111827",
+                            marginBottom: 12,
+                          }}
+                        >
+                          🔎 Trazabilidad de la reserva
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit,minmax(220px,1fr))",
+                            gap: 12,
+                          }}
+                        >
+                          {r.ingreso_confirmado_at && (
+                            <Info
+                              label="🟢 Ingreso confirmado"
+                              value={new Date(
+                                r.ingreso_confirmado_at
+                              ).toLocaleString([], {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
+                            />
+                          )}
+
+                          {r.salida_confirmada_at && (
+                            <Info
+                              label="🔴 Salida confirmada"
+                              value={new Date(
+                                r.salida_confirmada_at
+                              ).toLocaleString([], {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
+                            />
+                          )}
+
+                          {r.ingreso_confirmado_por && (
+                            <Info
+                              label="👮 Ingreso confirmado por"
+                              value={(() => {
+                                const u =
+                                  obtenerUsuarioCondominio(
+                                    r.ingreso_confirmado_por
+                                  );
+                                return u
+                                  ? `${u.nombre || ""} ${u.apellido || ""}`.trim()
+                                  : "Usuario registrado";
+                              })()}
+                            />
+                          )}
+
+                          {r.salida_confirmada_por && (
+                            <Info
+                              label="👮 Salida confirmada por"
+                              value={(() => {
+                                const u =
+                                  obtenerUsuarioCondominio(
+                                    r.salida_confirmada_por
+                                  );
+                                return u
+                                  ? `${u.nombre || ""} ${u.apellido || ""}`.trim()
+                                  : "Usuario registrado";
+                              })()}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* 🔥 ADMIN */}
 

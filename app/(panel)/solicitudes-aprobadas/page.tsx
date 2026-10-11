@@ -11,6 +11,11 @@ export default function SolicitudesAprobadas() {
 
   const { usuario } = useAuth();
 
+  const rol =
+    (usuario?.rol || "")
+      .toUpperCase()
+      .trim();
+
   const [solicitudes,
     setSolicitudes] =
     useState<any[]>([]);
@@ -32,6 +37,11 @@ export default function SolicitudesAprobadas() {
 
   useEffect(() => {
 
+    if (rol === "GUARDIA") {
+      router.replace("/dashboard");
+      return;
+    }
+
     if (
       usuario?.condominio_id
     ) {
@@ -40,7 +50,7 @@ export default function SolicitudesAprobadas() {
 
     }
 
-  }, [usuario]);
+  }, [usuario, rol, router]);
 
   async function cargarSolicitudes() {
 
@@ -279,6 +289,11 @@ export default function SolicitudesAprobadas() {
   function registrarFactura(
     solicitud: any
   ) {
+
+    if (rol === "GUARDIA") {
+      alert("El usuario GUARDIA no tiene acceso a este módulo.");
+      return;
+    }
 
     if (facturaRegistrada(solicitud)) {
       return;

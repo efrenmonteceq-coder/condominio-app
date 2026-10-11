@@ -2901,6 +2901,15 @@ if (rol === "RESIDENTE") {
                   router.push("/paqueteria")
                 }
               />
+
+              <CardPremium
+                titulo="📅 Reservas"
+                valor={reservasHoy}
+                color="#06b6d4"
+                onClick={() =>
+                  router.push("/reservas?solo=historial")
+                }
+              />
             </div>
           </div>
 
@@ -3137,6 +3146,22 @@ if (rol === "RESIDENTE") {
                 <div className="guardia-mobile-card-value">Gestionar</div>
                 <div className="guardia-mobile-card-subtitle">
                   Registra y entrega paquetes recibidos.
+                </div>
+                <div className="guardia-mobile-arrow">→</div>
+              </button>
+
+              <button
+                type="button"
+                className="guardia-mobile-card guardia-card-cyan"
+                onClick={() => router.push("/reservas?solo=historial")}
+              >
+                <div className="guardia-mobile-icon">
+                  <IconoAdminMovil tipo="reservas" />
+                </div>
+                <div className="guardia-mobile-card-title">Reservas</div>
+                <div className="guardia-mobile-card-value">{reservasHoy}</div>
+                <div className="guardia-mobile-card-subtitle">
+                  Consulta las reservas de áreas comunes.
                 </div>
                 <div className="guardia-mobile-arrow">→</div>
               </button>
@@ -5268,7 +5293,7 @@ function CardPremium({
 }: any) {
 
   const [hovered, setHovered] = useState(false);
-  const usaInteraccion = interactivo && !!onClick;
+  const usaInteraccion = !!onClick;
 
   return (
 
@@ -5295,7 +5320,7 @@ function CardPremium({
           `${compact ? 4 : 6}px solid ${color}`,
         transform:
           usaInteraccion && hovered
-            ? "translateY(-5px) scale(1.015)"
+            ? "translateY(-8px) scale(1.03)"
             : "translateY(0) scale(1)",
         transition:
           usaInteraccion

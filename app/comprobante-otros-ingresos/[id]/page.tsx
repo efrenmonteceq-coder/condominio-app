@@ -1,49 +1,118 @@
+"use client";
+
 import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import BotonesComprobante from "../../components/BotonesComprobante";
 
-type PageProps = {
-  params: Promise<{ id: string }>;
-};
+export default function ComprobanteOtrosIngresos() {
+  const params = useParams<{ id: string }>();
+  const id = decodeURIComponent(String(params.id ?? "")).trim();
+  const [ingreso, setIngreso] = useState<any>(null);
+  const [condominio, setCondominio] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorConsulta, setErrorConsulta] = useState("");
 
-export default async function ComprobanteOtrosIngresos({
-  params,
-}: PageProps) {
-  const resolvedParams = await params;
-  const id = decodeURIComponent(resolvedParams.id).trim();
+  useEffect(() => {
+    let cancelado = false;
 
-  const { data: ingreso } = await supabase
-    .from("movimientos_otros_ingresos")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+    async function cargarComprobante() {
+      setLoading(true);
+      setErrorConsulta("");
 
-  if (!ingreso) {
+      const { data: sesionData, error: errorSesion } =
+        await supabase.auth.getSession();
+
+      if (errorSesion || !sesionData.session) {
+        if (!cancelado) {
+          setErrorConsulta("Tu sesión no está disponible. Inicia sesión nuevamente y vuelve a abrir el comprobante.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("movimientos_otros_ingresos")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error consultando comprobante de otros ingresos:", error.message);
+        if (!cancelado) {
+          setErrorConsulta(`No se pudo consultar el comprobante. ${error.message}`);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (!data) {
+        if (!cancelado) {
+          setErrorConsulta("El comprobante no existe o tu usuario no tiene permiso para consultarlo.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data: datosCondominio, error: errorCondominio } = await supabase
+        .from("condominios")
+        .select("*")
+        .eq("id", data.condominio_id)
+        .maybeSingle();
+
+      if (errorCondominio) {
+        console.error("Error consultando condominio del comprobante:", errorCondominio.message);
+      }
+
+      if (!cancelado) {
+        setIngreso(data);
+        setCondominio(datosCondominio);
+        setLoading(false);
+      }
+    }
+
+    if (id) {
+      void cargarComprobante();
+    } else {
+      setErrorConsulta("El identificador del comprobante no es válido.");
+      setLoading(false);
+    }
+
+    return () => {
+      cancelado = true;
+    };
+  }, [id]);
+
+  if (loading) {
     return (
       <main style={styles.errorMain}>
         <div style={styles.errorCard}>
-          <h1 style={styles.errorTitle}>Comprobante no encontrado</h1>
-          <p style={styles.errorText}>
-            El comprobante de otros ingresos solicitado no existe o ya no está
-            disponible.
-          </p>
-
-          <div style={styles.errorNumber}>
-            <b>Identificador solicitado:</b>
-            <br />
-            <br />
-            {id}
-          </div>
+          <h1 style={{ ...styles.errorTitle, color: "#1e3a8a" }}>Cargando comprobante...</h1>
+          <p style={styles.errorText}>Estamos consultando el comprobante registrado.</p>
         </div>
       </main>
     );
   }
 
-  const { data: condominio } = await supabase
-    .from("condominios")
-    .select("*")
-    .eq("id", ingreso.condominio_id)
-    .maybeSingle();
+  if (errorConsulta || !ingreso) {
+    return (
+      <main style={styles.errorMain}>
+        <div style={styles.errorCard}>
+          <h1 style={styles.errorTitle}>No se pudo mostrar el comprobante</h1>
+          <p style={styles.errorText}>{errorConsulta || "El comprobante no está disponible."}</p>
+          <div style={styles.errorNumber}>
+            <b>Identificador solicitado:</b>
+            <br /><br />
+            {id}
+          </div>
+          <p style={styles.errorText}>
+            Si acabas de iniciar sesión, vuelve al módulo financiero y abre el comprobante otra vez.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const fecha = formatDate(ingreso.fecha_movimiento);
 

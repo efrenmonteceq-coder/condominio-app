@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -156,9 +157,17 @@ export default function Pagos() {
       .toUpperCase()
       .trim();
 
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && usuario && rol === "GUARDIA") {
+      router.replace("/dashboard");
+    }
+  }, [loading, usuario, rol, router]);
+
   useEffect(() => {
 
-    if (usuario?.condominio_id) {
+    if (usuario?.condominio_id && rol !== "GUARDIA") {
 
       cargarConfiguracion();
 

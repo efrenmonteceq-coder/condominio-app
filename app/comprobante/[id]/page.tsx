@@ -1,72 +1,152 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import BotonesComprobante from "@/app/components/BotonesComprobante";
 
-export default async function Comprobante({
+export default function Comprobante({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const [pago, setPago] = useState<any>(null);
+  const [residente, setResidente] = useState<any>(null);
+  const [vivienda, setVivienda] = useState<any>(null);
+  const [condominio, setCondominio] = useState<any>(null);
+  const [numero, setNumero] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [noEncontrado, setNoEncontrado] = useState(false);
 
-  const resolvedParams =
-    await params;
+  useEffect(() => {
+    let activo = true;
 
-  const numero =
-    decodeURIComponent(
-      resolvedParams.id
-    ).trim();
+    const cargarComprobante = async () => {
+      try {
+        const resolvedParams = await params;
+        const numeroSolicitado = decodeURIComponent(resolvedParams.id).trim();
 
-  const {
-    data: pago,
-  } = await supabase
-    .from("pagos_residentes")
-    .select("*")
-    .eq(
-      "numero_comprobante",
-      numero
-    )
-    .maybeSingle();
+        if (activo) {
+          setNumero(numeroSolicitado);
+        }
 
-  if (!pago) {
+        const { data: pagoData, error: pagoError } = await supabase
+          .from("pagos_residentes")
+          .select("*")
+          .eq("numero_comprobante", numeroSolicitado)
+          .maybeSingle();
 
+        if (pagoError) {
+          console.error("Error al consultar comprobante:", pagoError);
+        }
+
+        if (!pagoData) {
+          if (activo) {
+            setNoEncontrado(true);
+            setCargando(false);
+          }
+          return;
+        }
+
+        const [residenteResult, viviendaResult, condominioResult] =
+          await Promise.all([
+            supabase
+              .from("usuarios")
+              .select("*")
+              .eq("id", pagoData.residente_id)
+              .maybeSingle(),
+            supabase
+              .from("viviendas")
+              .select("*")
+              .eq("id", pagoData.vivienda_id)
+              .maybeSingle(),
+            supabase
+              .from("condominios")
+              .select("*")
+              .eq("id", pagoData.condominio_id)
+              .maybeSingle(),
+          ]);
+
+        if (activo) {
+          setPago(pagoData);
+          setResidente(residenteResult.data);
+          setVivienda(viviendaResult.data);
+          setCondominio(condominioResult.data);
+          setCargando(false);
+        }
+      } catch (error) {
+        console.error("Error al cargar comprobante:", error);
+        if (activo) {
+          setNoEncontrado(true);
+          setCargando(false);
+        }
+      }
+    };
+
+    cargarComprobante();
+
+    return () => {
+      activo = false;
+    };
+  }, [params]);
+
+  if (cargando) {
     return (
-
       <main
         style={{
-          minHeight:
-            "100vh",
-          background:
-            "#f3f4f6",
-          display:
-            "flex",
-          justifyContent:
-            "center",
-          alignItems:
-            "center",
+          minHeight: "100vh",
+          background: "#f3f4f6",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
           padding: 10,
-          fontFamily:
-            "Arial",
+          fontFamily: "Arial",
         }}
       >
-
         <div
           style={{
-            background:
-              "#fff",
+            background: "#fff",
             borderRadius: 14,
             padding: 22,
             maxWidth: 520,
             width: "100%",
-            textAlign:
-              "center",
-            boxShadow:
-              "0 8px 18px rgba(0,0,0,0.08)",
+            textAlign: "center",
+            boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
+            color: "#6b7280",
           }}
         >
+          Cargando comprobante...
+        </div>
+      </main>
+    );
+  }
 
+  if (noEncontrado || !pago) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          background: "#f3f4f6",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 10,
+          fontFamily: "Arial",
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 14,
+            padding: 22,
+            maxWidth: 520,
+            width: "100%",
+            textAlign: "center",
+            boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
+          }}
+        >
           <h1
             style={{
-              color:
-                "#dc2626",
+              color: "#dc2626",
               marginBottom: 10,
               fontSize: 22,
             }}
@@ -76,80 +156,33 @@ export default async function Comprobante({
 
           <p
             style={{
-              color:
-                "#6b7280",
+              color: "#6b7280",
               lineHeight: 1.5,
               fontSize: 13,
             }}
           >
-            El comprobante solicitado no existe
-            o todavía no ha sido generado.
+            El comprobante solicitado no existe o todavía no ha sido generado.
           </p>
 
           <div
             style={{
               marginTop: 14,
-              background:
-                "#f9fafb",
-              border:
-                "1px solid #e5e7eb",
+              background: "#f9fafb",
+              border: "1px solid #e5e7eb",
               padding: 12,
               borderRadius: 10,
               fontSize: 12,
             }}
           >
-
-            <b>
-              Número solicitado:
-            </b>
-
+            <b>Número solicitado:</b>
             <br />
             <br />
-
             {numero}
-
           </div>
-
         </div>
-
       </main>
-
     );
-
   }
-
-  const {
-    data: residente
-  } = await supabase
-    .from("usuarios")
-    .select("*")
-    .eq(
-      "id",
-      pago.residente_id
-    )
-    .maybeSingle();
-
-  const {
-    data: vivienda
-  } = await supabase
-    .from("viviendas")
-    .select("*")
-    .eq(
-      "id",
-      pago.vivienda_id
-    )
-    .maybeSingle();
-
-  const {
-    data: condominio
-  } = await supabase
-    .from("condominios")
-    .select("*")
-    .eq(
-      "id",
-      pago.condominio_id
-    )
-    .maybeSingle();
 
   const estilosPrint = `
     @media print {

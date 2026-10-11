@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -61,6 +62,8 @@ export default function EstadoCuenta() {
     logout,
   } = useAuth();
 
+  const router = useRouter();
+
   const [movimientos,
     setMovimientos] =
     useState<any[]>([]);
@@ -120,11 +123,18 @@ export default function EstadoCuenta() {
       .toUpperCase()
       .trim();
 
+  // 🔒 GUARDIA: no puede acceder al Estado de Cuenta
+  useEffect(() => {
+    if (!loading && rol === "GUARDIA") {
+      router.replace("/dashboard");
+    }
+  }, [loading, rol, router]);
+
   // 🔥 INIT
 
   useEffect(() => {
 
-    if (usuario?.condominio_id) {
+    if (usuario?.condominio_id && rol !== "GUARDIA") {
 
       cargarResidentes();
 
@@ -194,6 +204,8 @@ export default function EstadoCuenta() {
 
   const cargarEstadoCuenta =
     async () => {
+
+      if (rol === "GUARDIA") return;
 
       let residenteId = "";
 
@@ -624,6 +636,10 @@ export default function EstadoCuenta() {
 
     return <p>Cargando...</p>;
 
+  }
+
+  if (rol === "GUARDIA") {
+    return <p>Redirigiendo...</p>;
   }
 
   return (

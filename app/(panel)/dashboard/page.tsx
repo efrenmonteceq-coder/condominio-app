@@ -82,17 +82,20 @@ export default function Dashboard() {
   const [pagosTransparencia, setPagosTransparencia] =
     useState<any[]>([]);
 
-  const [gastosTransparencia, setGastosTransparencia] =
-    useState<any[]>([]);
-
-  // 💰 OTROS INGRESOS · resumen financiero mensual
-  // Se mantiene separado de pagos_residentes porque corresponde a
-  // movimientos_otros_ingresos.
-  const [otrosIngresosTransparencia, setOtrosIngresosTransparencia] =
+  // Fuente única y agregada de transparencia financiera para PC y móvil.
+  // La RPC devuelve totales mensuales sin exponer pagos individuales de terceros.
+  const [transparenciaFinancieraMensual, setTransparenciaFinancieraMensual] =
     useState<any[]>([]);
 
   const [mesTransparencia, setMesTransparencia] =
     useState("");
+
+  // 💰 Filtro de período compartido por ADMINISTRADOR, RESIDENTE y DIRECTIVA,
+  // tanto en escritorio como en móvil.
+  const [tipoPeriodoTransparencia, setTipoPeriodoTransparencia] = useState("mes");
+  const [fechaInicioTransparencia, setFechaInicioTransparencia] = useState("");
+  const [fechaFinTransparencia, setFechaFinTransparencia] = useState("");
+  const [menuPeriodoTransparenciaAbierto, setMenuPeriodoTransparenciaAbierto] = useState(false);
 
   // 💰 ADMIN MÓVIL · selector financiero independiente
   // Evita que el selector compartido con otras vistas afecte la actualización
@@ -1175,35 +1178,30 @@ const vencidos =
         totalGastos
       );
 
-      setGastosTransparencia(
-        gastosData || []
-      );
+      // 💰 TRANSPARENCIA FINANCIERA · solo para los roles que utilizan este módulo.
+      // GUARDIA no consulta ni necesita los datos de transparencia financiera.
+      // Evitamos llamar a la RPC para ese rol y conservamos el comportamiento de los demás.
+      if (["ADMIN", "RESIDENTE", "DIRECTIVA"].includes(rol)) {
+        const {
+          data: transparenciaMensualData,
+          error: errorTransparenciaMensual,
+        } = await supabase.rpc("transparencia_financiera_mensual");
 
-      // 💰 OTROS INGRESOS
-      // Ingresos distintos de las alícuotas para el resumen financiero.
-      const {
-        data: otrosIngresosData,
-        error: errorOtrosIngresos,
-      } = await supabase
-        .from("movimientos_otros_ingresos")
-        .select(
-          "fecha_movimiento, subtotal, total, tipo_documento, estado"
-        )
-        .eq(
-          "condominio_id",
-          usuario.condominio_id
-        );
-
-      if (errorOtrosIngresos) {
-        console.error(
-          "❌ Error cargando otros ingresos para el resumen financiero:",
-          errorOtrosIngresos
-        );
-        setOtrosIngresosTransparencia([]);
+        if (errorTransparenciaMensual) {
+          console.error(
+            "❌ Error cargando transparencia financiera mensual:",
+            errorTransparenciaMensual
+          );
+          setTransparenciaFinancieraMensual([]);
+        } else {
+          setTransparenciaFinancieraMensual(transparenciaMensualData || []);
+        }
       } else {
-        setOtrosIngresosTransparencia(
-          otrosIngresosData || []
-        );
+        setTransparenciaFinancieraMensual([]);
+        setMesTransparencia("");
+        setMesTransparenciaAdminMovil("");
+        setMesTransparenciaResidenteMovil("");
+        setMesTransparenciaDirectivaMovil("");
       }
 
       // ==========================================
@@ -1319,73 +1317,13 @@ if (rol === "DIRECTIVA") {
   }, [loading, usuario?.condominio_id, usuario?.id, rol]);
 
   // 💰 TRANSPARENCIA FINANCIERA - CORTES MENSUALES
-  // Los meses se construyen desde el primer movimiento financiero disponible
-  // hasta el mes actual. Así también se pueden consultar meses sin movimientos.
+  // La RPC genera todos los meses desde el primer movimiento histórico hasta el actual,
+  // incluyendo meses sin movimientos. PC y móvil consumen el mismo resultado.
   const mesesTransparencia = useMemo(() => {
-    const meses = new Set<string>();
-
-    pagosTransparencia.forEach((pago) => {
-      if (pago.fecha_pago && pago.estado === "PAGADO") {
-        meses.add(String(pago.fecha_pago).slice(0, 7));
-      }
-    });
-
-    gastosTransparencia.forEach((gasto) => {
-      if (gasto.fecha_gasto) {
-        meses.add(String(gasto.fecha_gasto).slice(0, 7));
-      }
-    });
-
-    otrosIngresosTransparencia.forEach((ingreso) => {
-      const estado = String(
-        ingreso.estado || ""
-      ).toUpperCase();
-
-      if (
-        ingreso.fecha_movimiento &&
-        estado !== "ANULADO"
-      ) {
-        meses.add(
-          String(ingreso.fecha_movimiento).slice(0, 7)
-        );
-      }
-    });
-
-    const mesesOrdenados = Array.from(meses).sort();
-
-    if (mesesOrdenados.length === 0) {
-      return [];
-    }
-
-    const inicio = new Date(`${mesesOrdenados[0]}-01T00:00:00`);
-    const hoy = new Date();
-    const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const resultado: string[] = [];
-
-    let cursor = new Date(
-      inicio.getFullYear(),
-      inicio.getMonth(),
-      1
-    );
-
-    while (cursor <= fin) {
-      resultado.push(
-        `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
-      );
-
-      cursor = new Date(
-        cursor.getFullYear(),
-        cursor.getMonth() + 1,
-        1
-      );
-    }
-
-    return resultado;
-  }, [
-    pagosTransparencia,
-    gastosTransparencia,
-    otrosIngresosTransparencia,
-  ]);
+    return transparenciaFinancieraMensual
+      .map((fila) => String(fila.mes || "").slice(0, 7))
+      .filter((mes) => /^\d{4}-\d{2}$/.test(mes));
+  }, [transparenciaFinancieraMensual]);
 
   useEffect(() => {
     if (mesesTransparencia.length === 0) {
@@ -1397,74 +1335,21 @@ if (rol === "DIRECTIVA") {
       if (mesActual && mesesTransparencia.includes(mesActual)) {
         return mesActual;
       }
-
       return mesesTransparencia[mesesTransparencia.length - 1];
     });
   }, [mesesTransparencia]);
 
   const transparenciaMensual = useMemo(() => {
-    const meses = mesesTransparencia.map((mes) => {
-      const ingresosAlicuotas = pagosTransparencia.reduce(
-        (total, pago) => {
-          if (
-            pago.estado !== "PAGADO" ||
-            !pago.fecha_pago ||
-            String(pago.fecha_pago).slice(0, 7) !== mes
-          ) {
-            return total;
-          }
+    let acumulado = 0;
 
-          return total + Number(pago.valor_pagado || 0);
-        },
-        0
-      );
-
-      const otrosIngresos = otrosIngresosTransparencia.reduce(
-        (total, ingreso) => {
-          if (
-            !ingreso.fecha_movimiento ||
-            String(ingreso.fecha_movimiento).slice(0, 7) !== mes
-          ) {
-            return total;
-          }
-
-          const estado = String(
-            ingreso.estado || ""
-          ).toUpperCase();
-
-          if (estado === "ANULADO") {
-            return total;
-          }
-
-          const tipoDocumento = String(
-            ingreso.tipo_documento || ""
-          ).toUpperCase();
-
-          const valorIngreso =
-            tipoDocumento === "COMPROBANTE_INTERNO"
-              ? Number(ingreso.subtotal || 0)
-              : Number(ingreso.total || 0);
-
-          return total + valorIngreso;
-        },
-        0
-      );
-
-      const egresos = gastosTransparencia.reduce(
-        (total, gasto) => {
-          if (
-            !gasto.fecha_gasto ||
-            String(gasto.fecha_gasto).slice(0, 7) !== mes
-          ) {
-            return total;
-          }
-
-          return total + Number(gasto.total || 0);
-        },
-        0
-      );
-
+    return transparenciaFinancieraMensual.map((fila) => {
+      const mes = String(fila.mes || "").slice(0, 7);
+      const ingresosAlicuotas = Number(fila.ingresos_alicuotas || 0);
+      const otrosIngresos = Number(fila.otros_ingresos || 0);
+      const egresos = Number(fila.egresos || 0);
       const ingresos = ingresosAlicuotas + otrosIngresos;
+      const resultado = ingresos - egresos;
+      acumulado += resultado;
 
       return {
         mes,
@@ -1472,39 +1357,59 @@ if (rol === "DIRECTIVA") {
         ingresosAlicuotas,
         otrosIngresos,
         egresos,
-        resultado: ingresos - egresos,
-      };
-    });
-
-    let acumulado = 0;
-
-    return meses.map((item) => {
-      acumulado += item.resultado;
-
-      return {
-        ...item,
+        resultado,
         saldoAcumulado: acumulado,
       };
     });
-  }, [
-    mesesTransparencia,
-    pagosTransparencia,
-    gastosTransparencia,
-    otrosIngresosTransparencia,
-  ]);
+  }, [transparenciaFinancieraMensual]);
 
-  const transparenciaSeleccionada =
-    transparenciaMensual.find(
-      (item) => item.mes === mesTransparencia
-    ) || {
-      mes: mesTransparencia,
-      ingresos: 0,
-      ingresosAlicuotas: 0,
-      otrosIngresos: 0,
-      egresos: 0,
-      resultado: 0,
-      saldoAcumulado: 0,
-    };
+  const calcularResumenTransparencia = (mesReferencia: string) => {
+    let inicio = mesReferencia;
+    let fin = mesReferencia;
+
+    if (tipoPeriodoTransparencia === "trimestre" && /^\d{4}-\d{2}$/.test(mesReferencia)) {
+      const [anio, mes] = mesReferencia.split("-").map(Number);
+      const mesInicio = Math.floor((mes - 1) / 3) * 3 + 1;
+      inicio = `${anio}-${String(mesInicio).padStart(2, "0")}`;
+      fin = `${anio}-${String(mesInicio + 2).padStart(2, "0")}`;
+    } else if (tipoPeriodoTransparencia === "semestre" && /^\d{4}-\d{2}$/.test(mesReferencia)) {
+      const [anio, mes] = mesReferencia.split("-").map(Number);
+      inicio = `${anio}-${mes <= 6 ? "01" : "07"}`;
+      fin = `${anio}-${mes <= 6 ? "06" : "12"}`;
+    } else if (tipoPeriodoTransparencia === "anio" && /^\d{4}-\d{2}$/.test(mesReferencia)) {
+      const anio = mesReferencia.slice(0, 4);
+      inicio = `${anio}-01`;
+      fin = `${anio}-12`;
+    } else if (tipoPeriodoTransparencia === "personalizado") {
+      inicio = fechaInicioTransparencia.slice(0, 7);
+      fin = fechaFinTransparencia.slice(0, 7);
+    }
+
+    const rangoValido = /^\d{4}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}$/.test(fin) && inicio <= fin;
+    const detalleMensual = rangoValido
+      ? transparenciaMensual.filter((item) => item.mes >= inicio && item.mes <= fin)
+      : [];
+    const filaAnterior = transparenciaMensual.filter((item) => item.mes < inicio).slice(-1)[0];
+    const saldoInicial = filaAnterior?.saldoAcumulado || 0;
+    const ingresosAlicuotas = detalleMensual.reduce((total, item) => total + item.ingresosAlicuotas, 0);
+    const otrosIngresos = detalleMensual.reduce((total, item) => total + item.otrosIngresos, 0);
+    const ingresos = ingresosAlicuotas + otrosIngresos;
+    const egresos = detalleMensual.reduce((total, item) => total + item.egresos, 0);
+    const resultado = ingresos - egresos;
+    const ultimoMesRango = detalleMensual[detalleMensual.length - 1];
+    const saldoAcumulado = ultimoMesRango?.saldoAcumulado ?? saldoInicial;
+    const etiquetaPeriodo = tipoPeriodoTransparencia === "personalizado"
+      ? (fechaInicioTransparencia && fechaFinTransparencia ? `${fechaInicioTransparencia} al ${fechaFinTransparencia}` : "Selecciona las fechas")
+      : inicio && fin && inicio !== fin
+        ? `${formatoMesTransparencia(inicio)} – ${formatoMesTransparencia(fin)}`
+        : formatoMesTransparencia(inicio);
+
+    return { mes: etiquetaPeriodo, inicio, fin, ingresos, ingresosAlicuotas, otrosIngresos, egresos, resultado, saldoInicial, saldoAcumulado, detalleMensual };
+  };
+
+  // El cálculo es ligero y se ejecuta directamente para evitar dependencias
+  // de hooks que puedan quedar desincronizadas con el período seleccionado.
+  const transparenciaSeleccionada = calcularResumenTransparencia(mesTransparencia);
 
   // 👤 RESIDENTE PC · resumen personal inmediato
   // Se construye únicamente con la información del residente autenticado.
@@ -1579,21 +1484,7 @@ if (rol === "DIRECTIVA") {
     });
   }, [mesesTransparencia]);
 
-  const transparenciaSeleccionadaAdminMovil = useMemo(() => {
-    return (
-      transparenciaMensual.find(
-        (item) => item.mes === mesTransparenciaAdminMovil
-      ) || {
-        mes: mesTransparenciaAdminMovil,
-        ingresos: 0,
-        ingresosAlicuotas: 0,
-        otrosIngresos: 0,
-        egresos: 0,
-        resultado: 0,
-        saldoAcumulado: 0,
-      }
-    );
-  }, [transparenciaMensual, mesTransparenciaAdminMovil]);
+  const transparenciaSeleccionadaAdminMovil = calcularResumenTransparencia(mesTransparenciaAdminMovil);
 
   // 💰 RESIDENTE MÓVIL · sincronización inicial del período
   useEffect(() => {
@@ -1611,21 +1502,7 @@ if (rol === "DIRECTIVA") {
     });
   }, [mesesTransparencia]);
 
-  const transparenciaSeleccionadaResidenteMovil = useMemo(() => {
-    return (
-      transparenciaMensual.find(
-        (item) => item.mes === mesTransparenciaResidenteMovil
-      ) || {
-        mes: mesTransparenciaResidenteMovil,
-        ingresos: 0,
-        ingresosAlicuotas: 0,
-        otrosIngresos: 0,
-        egresos: 0,
-        resultado: 0,
-        saldoAcumulado: 0,
-      }
-    );
-  }, [transparenciaMensual, mesTransparenciaResidenteMovil]);
+  const transparenciaSeleccionadaResidenteMovil = calcularResumenTransparencia(mesTransparenciaResidenteMovil);
 
   // 💰 DIRECTIVA MÓVIL · sincronización inicial del período
   useEffect(() => {
@@ -1639,13 +1516,9 @@ if (rol === "DIRECTIVA") {
     });
   }, [mesesTransparencia]);
 
-  const transparenciaSeleccionadaDirectivaMovil = useMemo(() => {
-    return transparenciaMensual.find((item) => item.mes === mesTransparenciaDirectivaMovil) || {
-      mes: mesTransparenciaDirectivaMovil, ingresos: 0, ingresosAlicuotas: 0, otrosIngresos: 0, egresos: 0, resultado: 0, saldoAcumulado: 0,
-    };
-  }, [transparenciaMensual, mesTransparenciaDirectivaMovil]);
+  const transparenciaSeleccionadaDirectivaMovil = calcularResumenTransparencia(mesTransparenciaDirectivaMovil);
 
-  const formatoMesTransparencia = (mes: string) => {
+  function formatoMesTransparencia(mes: string) {
     if (!mes) {
       return "Sin información";
     }
@@ -1661,7 +1534,161 @@ if (rol === "DIRECTIVA") {
       month: "long",
       year: "numeric",
     });
+  }
+
+  const etiquetasPeriodoTransparencia: Record<string, string> = {
+    mes: "Por mes",
+    trimestre: "Por trimestre",
+    semestre: "Por semestre",
+    anio: "Año completo",
+    personalizado: "Rango personalizado",
   };
+
+  const opcionesPeriodoTransparencia = [
+    { valor: "mes", etiqueta: "Por mes" },
+    { valor: "trimestre", etiqueta: "Por trimestre" },
+    { valor: "semestre", etiqueta: "Por semestre" },
+    { valor: "anio", etiqueta: "Año completo" },
+    { valor: "personalizado", etiqueta: "Rango personalizado" },
+  ];
+
+  const renderControlesPeriodoTransparencia = () => (
+    <div style={{ margin: "10px 0 14px", border: "1px solid #e2e8f0", borderRadius: 12, padding: 10, background: "#fff", width: "100%", boxSizing: "border-box" }}>
+      <button
+        type="button"
+        onClick={() => setMenuPeriodoTransparenciaAbierto((abierto) => !abierto)}
+        aria-expanded={menuPeriodoTransparenciaAbierto}
+        aria-label="Elegir período de transparencia financiera"
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 10, border: 0, background: "transparent", padding: "5px 2px", color: "#0f172a", fontWeight: 700, cursor: "pointer", textAlign: "left" }}
+      >
+        <span>Período de consulta: {etiquetasPeriodoTransparencia[tipoPeriodoTransparencia] || "Por mes"}</span>
+        <span aria-hidden="true">{menuPeriodoTransparenciaAbierto ? "▴" : "▾"}</span>
+      </button>
+
+      {menuPeriodoTransparenciaAbierto && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginTop: 10 }}>
+          {opcionesPeriodoTransparencia.map((opcion) => (
+            <button
+              key={opcion.valor}
+              type="button"
+              aria-pressed={tipoPeriodoTransparencia === opcion.valor}
+              onClick={() => {
+                setTipoPeriodoTransparencia(opcion.valor);
+                if (opcion.valor !== "personalizado") {
+                  setFechaInicioTransparencia("");
+                  setFechaFinTransparencia("");
+                }
+                setMenuPeriodoTransparenciaAbierto(false);
+              }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 12px", border: tipoPeriodoTransparencia === opcion.valor ? "1px solid #93c5fd" : "1px solid #e2e8f0", borderRadius: 9, background: tipoPeriodoTransparencia === opcion.valor ? "#eff6ff" : "#fff", color: "#0f172a", fontWeight: tipoPeriodoTransparencia === opcion.valor ? 700 : 500, textAlign: "left", cursor: "pointer" }}
+            >
+              <span>{opcion.etiqueta}</span>
+              {tipoPeriodoTransparencia === opcion.valor && <span aria-hidden="true">✓</span>}
+            </button>
+          ))}
+
+          {tipoPeriodoTransparencia === "personalizado" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 10, marginTop: 6 }}>
+              <label style={{ fontSize: 13, color: "#475569" }}>
+                Desde mes
+                <input
+                  type="month"
+                  value={fechaInicioTransparencia}
+                  onChange={(e) => {
+                    const nuevoInicio = e.target.value;
+                    setFechaInicioTransparencia(nuevoInicio);
+                    if (fechaFinTransparencia && nuevoInicio && fechaFinTransparencia < nuevoInicio) {
+                      setFechaFinTransparencia("");
+                    }
+                  }}
+                  style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 4, border: "1px solid #cbd5e1", borderRadius: 8, padding: "9px 8px", background: "#fff", color: "#0f172a" }}
+                />
+              </label>
+              <label style={{ fontSize: 13, color: "#475569" }}>
+                Hasta mes
+                <input
+                  type="month"
+                  min={fechaInicioTransparencia || undefined}
+                  value={fechaFinTransparencia}
+                  onChange={(e) => setFechaFinTransparencia(e.target.value)}
+                  style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 4, border: "1px solid #cbd5e1", borderRadius: 8, padding: "9px 8px", background: "#fff", color: "#0f172a" }}
+                />
+              </label>
+              {(!fechaInicioTransparencia || !fechaFinTransparencia) && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#64748b" }}>Selecciona el mes inicial y el mes final para consultar el rango.</div>
+              )}
+            </div>
+          )}
+          {tipoPeriodoTransparencia !== "personalizado" && (
+            <div style={{ fontSize: 12, color: "#64748b", padding: "4px 2px" }}>
+              Elige el mes de referencia en el selector para definir el período.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // DIRECTIVA: selector compacto de consulta, con período y referencia en el mismo bloque.
+  const renderControlesPeriodoDirectiva = (
+    mesReferencia: string,
+    setMesReferencia: (mes: string) => void
+  ) => (
+    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, margin: "10px 0 14px", padding: 8, border: "1px solid #e2e8f0", borderRadius: 10, background: "#fff", boxSizing: "border-box", maxWidth: "100%" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b", fontWeight: 600 }}>
+        Consulta
+        <select
+          value={tipoPeriodoTransparencia}
+          onChange={(e) => {
+            setTipoPeriodoTransparencia(e.target.value);
+            if (e.target.value !== "personalizado") {
+              setFechaInicioTransparencia("");
+              setFechaFinTransparencia("");
+            }
+          }}
+          style={{ maxWidth: 175, border: "1px solid #cbd5e1", borderRadius: 7, padding: "7px 9px", background: "#fff", color: "#0f172a", fontSize: 13 }}
+        >
+          {opcionesPeriodoTransparencia.map((opcion) => <option key={opcion.valor} value={opcion.valor}>{opcion.etiqueta}</option>)}
+        </select>
+      </label>
+      {tipoPeriodoTransparencia !== "personalizado" ? (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b", fontWeight: 600 }}>
+          Referencia
+          <select
+            value={mesReferencia}
+            onChange={(e) => setMesReferencia(e.target.value)}
+            style={{ minWidth: 130, maxWidth: 190, border: "1px solid #cbd5e1", borderRadius: 7, padding: "7px 9px", background: "#fff", color: "#0f172a", fontSize: 13 }}
+          >
+            {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
+          </select>
+        </label>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <label style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Desde <input type="month" value={fechaInicioTransparencia} onChange={(e) => { const inicio = e.target.value; setFechaInicioTransparencia(inicio); if (fechaFinTransparencia && inicio && fechaFinTransparencia < inicio) setFechaFinTransparencia(""); }} style={{ marginLeft: 4, border: "1px solid #cbd5e1", borderRadius: 7, padding: "7px 6px", fontSize: 13, color: "#0f172a", maxWidth: 150 }} /></label>
+          <label style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Hasta <input type="month" min={fechaInicioTransparencia || undefined} value={fechaFinTransparencia} onChange={(e) => setFechaFinTransparencia(e.target.value)} style={{ marginLeft: 4, border: "1px solid #cbd5e1", borderRadius: 7, padding: "7px 6px", fontSize: 13, color: "#0f172a", maxWidth: 150 }} /></label>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDetalleMensualTransparencia = (resumen: ReturnType<typeof calcularResumenTransparencia>) => (
+    <details style={{ marginTop: 16, border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff" }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700, color: "#334155" }}>
+        {tipoPeriodoTransparencia === "mes" ? "Ver detalle del mes" :
+          tipoPeriodoTransparencia === "trimestre" ? "Ver detalle del trimestre (desglosado por mes)" :
+          tipoPeriodoTransparencia === "semestre" ? "Ver detalle del semestre (desglosado por mes)" :
+          tipoPeriodoTransparencia === "anio" ? "Ver detalle anual (desglosado por mes)" :
+          "Ver detalle del rango personalizado (desglosado por mes)"}
+      </summary>
+      <div style={{ overflowX: "auto", marginTop: 10 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
+          <thead><tr>{["Mes", "Ingresos", "Gastos", "Resultado", "Saldo acumulado"].map((titulo) => <th key={titulo} style={{ textAlign: titulo === "Mes" ? "left" : "right", padding: 8, borderBottom: "1px solid #cbd5e1", color: "#475569" }}>{titulo}</th>)}</tr></thead>
+          <tbody>{resumen.detalleMensual.map((item) => <tr key={item.mes}><td style={{ padding: 8, borderBottom: "1px solid #e2e8f0" }}>{formatoMesTransparencia(item.mes)}</td><td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>${item.ingresos.toFixed(2)}</td><td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>${item.egresos.toFixed(2)}</td><td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>${item.resultado.toFixed(2)}</td><td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #e2e8f0" }}>${item.saldoAcumulado.toFixed(2)}</td></tr>)}
+          {resumen.detalleMensual.length === 0 && <tr><td colSpan={5} style={{ padding: 10, color: "#64748b" }}>No hay movimientos mensuales para el período seleccionado.</td></tr>}</tbody>
+        </table>
+      </div>
+    </details>
+  );
 
   // 🔒 LOADING
 
@@ -1992,17 +2019,12 @@ if (rol === "RESIDENTE") {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
             <div>
               <h2 style={{ margin: 0, marginBottom: 6, fontWeight: 800 }}>Transparencia Financiera de la urbanización</h2>
-              <div style={{ color: "#64748b", fontSize: 14 }}>Corte mensual de ingresos, gastos y saldo acumulado.</div>
+              <div style={{ color: "#64748b", fontSize: 14 }}>Ingresos, gastos y saldo acumulado de la urbanización.</div>
+              {renderControlesPeriodoDirectiva(mesTransparencia, setMesTransparencia)}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice > 0) setMesTransparencia(mesesTransparencia[indice - 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) <= 0 ? 0.45 : 1 }}>←</button>
-              <select value={mesTransparencia} onChange={(e) => setMesTransparencia(e.target.value)} style={{ minWidth: 190, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff", fontWeight: 600, color: "#0f172a" }}>
-                {mesesTransparencia.length === 0 ? <option value="">Sin información</option> : mesesTransparencia.map((mes) => <option key={mes} value={mes}>{formatoMesTransparencia(mes)}</option>)}
-              </select>
-              <button type="button" disabled={!mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1} onClick={() => { const indice = mesesTransparencia.indexOf(mesTransparencia); if (indice >= 0 && indice < mesesTransparencia.length - 1) setMesTransparencia(mesesTransparencia[indice + 1]); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 10, padding: "9px 12px", cursor: "pointer", opacity: !mesTransparencia || mesesTransparencia.indexOf(mesTransparencia) === mesesTransparencia.length - 1 ? 0.45 : 1 }}>→</button>
-            </div>
+            
           </div>
-          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14, fontWeight: 600 }}>Período: {formatoMesTransparencia(transparenciaSeleccionada.mes)}</div>
+          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14, fontWeight: 600 }}>Período: {transparenciaSeleccionada.mes}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 20 }}>
             <CardPremium
               titulo="🏠 Ingresos por alícuotas"
@@ -2019,21 +2041,21 @@ if (rol === "RESIDENTE") {
             />
 
             <CardPremium
-              titulo="💵 Ingresos totales del mes"
+              titulo="💵 Ingresos totales del período"
               valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
               color="#0f766e"
               compact
             />
 
             <CardPremium
-              titulo="🧾 Gastos del mes"
+              titulo="🧾 Gastos del período"
               valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
               color="#dc2626"
               compact
             />
 
             <CardPremium
-              titulo="📊 Resultado del mes"
+              titulo="📊 Resultado del período"
               valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
               color={
                 transparenciaSeleccionada.resultado >= 0
@@ -2046,8 +2068,7 @@ if (rol === "RESIDENTE") {
             <CardPremium
               titulo="📘 Saldo acumulado anterior"
               valor={`$${(
-                transparenciaSeleccionada.saldoAcumulado -
-                transparenciaSeleccionada.resultado
+                transparenciaSeleccionada.saldoInicial
               ).toFixed(2)}`}
               color="#000000"
               compact
@@ -2060,6 +2081,7 @@ if (rol === "RESIDENTE") {
               compact
             />
           </div>
+          {renderDetalleMensualTransparencia(transparenciaSeleccionada)}
         </div>
 
       </div>
@@ -2157,7 +2179,7 @@ if (rol === "RESIDENTE") {
               .residente-mobile .residente-mobile-saludo {
                 align-items: center !important;
                 gap: 12px !important;
-                padding-right: 112px !important;
+                padding-right: 142px !important;
               }
               .residente-mobile .residente-mobile-header-info {
                 min-width: 0 !important;
@@ -2166,19 +2188,82 @@ if (rol === "RESIDENTE") {
               .residente-mobile .residente-mobile-hola {
                 color: #000000 !important;
                 font-weight: 800 !important;
-                font-size: 19px !important;
+                font-size: 16px !important;
                 line-height: 1.2 !important;
                 margin-bottom: 7px !important;
               }
               .residente-mobile .residente-mobile-condominio,
               .residente-mobile .residente-mobile-vivienda {
                 color: #000000 !important;
-                font-size: 14px !important;
-                line-height: 1.35 !important;
+                font-size: 12.5px !important;
+                line-height: 1.3 !important;
+              }
+              .residente-mobile .renalix-mobile-logo-wrap {
+                top: 50% !important;
+                right: 10px !important;
+                width: 132px !important;
+                transform: translateY(-50%) !important;
+              }
+              .residente-mobile .renalix-mobile-logo {
+                width: 122px !important;
+              }
+            }
+            @media (max-width: 380px) {
+              .residente-mobile .residente-mobile-saludo {
+                padding-right: 116px !important;
+                gap: 8px !important;
+              }
+              .residente-mobile .residente-mobile-avatar {
+                width: 54px !important;
+                min-width: 54px !important;
+                height: 54px !important;
+              }
+              .residente-mobile .residente-mobile-hola {
+                font-size: 15px !important;
+              }
+              .residente-mobile .residente-mobile-condominio,
+              .residente-mobile .residente-mobile-vivienda {
+                font-size: 11.5px !important;
+              }
+              .residente-mobile .renalix-mobile-logo-wrap {
+                width: 108px !important;
+                right: 8px !important;
+              }
+              .residente-mobile .renalix-mobile-logo {
+                width: 100px !important;
               }
             }
           ` }} />
-          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
+          
+<div
+              className="renalix-mobile-logo-wrap"
+              style={{
+                position: "absolute",
+                top: "50%",
+                right: 12,
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                width: 132,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                borderRadius: 12,
+                padding: 0,
+              }}
+            >
+              <img
+                className="renalix-mobile-logo"
+                src="/branding/renalix-horizontal.png"
+                alt="RENALIX"
+                style={{
+                  width: 122,
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                }}
+              />
+            </div>
 
           <div className="residente-mobile-saludo">
             {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
@@ -2614,118 +2699,9 @@ if (rol === "RESIDENTE") {
               className="residente-mobile-subtitle"
               style={{ marginTop: 4 }}
             >
-              Corte mensual de ingresos, gastos y saldo acumulado.
+              Ingresos, gastos y saldo acumulado de la urbanización.
             </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 12,
-            }}
-          >
-            <button
-              type="button"
-              disabled={
-                !mesTransparenciaResidenteMovil ||
-                mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0
-              }
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(
-                  mesTransparenciaResidenteMovil
-                );
-                if (indice > 0) {
-                  setMesTransparenciaResidenteMovil(
-                    mesesTransparencia[indice - 1]
-                  );
-                }
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 9,
-                padding: "8px 11px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparenciaResidenteMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) <= 0
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              ←
-            </button>
-
-            <select
-              value={mesTransparenciaResidenteMovil}
-              onChange={(e) =>
-                setMesTransparenciaResidenteMovil(e.target.value)
-              }
-              onInput={(e) =>
-                setMesTransparenciaResidenteMovil(
-                  (e.target as HTMLSelectElement).value
-                )
-              }
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: "1px solid #cbd5e1",
-                borderRadius: 9,
-                padding: "9px 10px",
-                background: "#fff",
-                fontWeight: 600,
-                color: "#0f172a",
-              }}
-            >
-              {mesesTransparencia.length === 0 ? (
-                <option value="">Sin información</option>
-              ) : (
-                mesesTransparencia.map((mes) => (
-                  <option key={mes} value={mes}>
-                    {formatoMesTransparencia(mes)}
-                  </option>
-                ))
-              )}
-            </select>
-
-            <button
-              type="button"
-              disabled={
-                !mesTransparenciaResidenteMovil ||
-                mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) ===
-                  mesesTransparencia.length - 1
-              }
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(
-                  mesTransparenciaResidenteMovil
-                );
-                if (
-                  indice >= 0 &&
-                  indice < mesesTransparencia.length - 1
-                ) {
-                  setMesTransparenciaResidenteMovil(
-                    mesesTransparencia[indice + 1]
-                  );
-                }
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 9,
-                padding: "8px 11px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparenciaResidenteMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaResidenteMovil) ===
-                    mesesTransparencia.length - 1
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              →
-            </button>
+            {renderControlesPeriodoDirectiva(mesTransparenciaResidenteMovil, setMesTransparenciaResidenteMovil)}
           </div>
 
           <div
@@ -2736,7 +2712,7 @@ if (rol === "RESIDENTE") {
               marginBottom: 10,
             }}
           >
-            Período: {formatoMesTransparencia(transparenciaSeleccionadaResidenteMovil.mes)}
+            Período: {transparenciaSeleccionadaResidenteMovil.mes}
           </div>
 
           <div
@@ -2762,21 +2738,21 @@ if (rol === "RESIDENTE") {
             </div>
 
             <div style={{ background: "#ecfeff", border: "1px solid #a5f3fc", borderRadius: 13, padding: 11 }}>
-              <div style={{ fontSize: 11, color: "#0f766e" }}>Ingresos totales del mes</div>
+              <div style={{ fontSize: 11, color: "#0f766e" }}>Ingresos totales del período</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: "#115e59", marginTop: 4 }}>
                 ${transparenciaSeleccionadaResidenteMovil.ingresos.toFixed(2)}
               </div>
             </div>
 
             <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 13, padding: 11 }}>
-              <div style={{ fontSize: 11, color: "#be123c" }}>Gastos del mes</div>
+              <div style={{ fontSize: 11, color: "#be123c" }}>Gastos del período</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: "#9f1239", marginTop: 4 }}>
                 ${transparenciaSeleccionadaResidenteMovil.egresos.toFixed(2)}
               </div>
             </div>
 
             <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 13, padding: 11 }}>
-              <div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del mes</div>
+              <div style={{ fontSize: 11, color: "#1d4ed8" }}>Resultado del período</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: transparenciaSeleccionadaResidenteMovil.resultado >= 0 ? "#1e3a8a" : "#dc2626", marginTop: 4 }}>
                 ${transparenciaSeleccionadaResidenteMovil.resultado.toFixed(2)}
               </div>
@@ -2785,7 +2761,7 @@ if (rol === "RESIDENTE") {
             <div style={{ background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 13, padding: 11 }}>
               <div style={{ fontSize: 11, color: "#4338ca" }}>Saldo acumulado anterior</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: "#3730a3", marginTop: 4 }}>
-                ${(transparenciaSeleccionadaResidenteMovil.saldoAcumulado - transparenciaSeleccionadaResidenteMovil.resultado).toFixed(2)}
+                ${(transparenciaSeleccionadaResidenteMovil.saldoInicial).toFixed(2)}
               </div>
             </div>
 
@@ -2796,6 +2772,7 @@ if (rol === "RESIDENTE") {
               </div>
             </div>
           </div>
+          {renderDetalleMensualTransparencia(transparenciaSeleccionadaResidenteMovil)}
         </div>
 
       </div>
@@ -3051,7 +3028,35 @@ if (rol === "RESIDENTE") {
         <div className="guardia-mobile">
           <div className="guardia-mobile-header">
             <div className="guardia-mobile-header-glow" />
-            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
+            <div
+              className="renalix-mobile-logo-wrap"
+              style={{
+                position: "absolute",
+                top: "50%",
+                right: 12,
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                width: 132,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                borderRadius: 12,
+                padding: 0,
+              }}
+            >
+              <img
+                className="renalix-mobile-logo"
+                src="/branding/renalix-horizontal.png"
+                alt="RENALIX"
+                style={{
+                  width: 122,
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                }}
+              />
+            </div>
             <div className="guardia-mobile-saludo">
               {renderAvatarPerfilMovil("🛡️", "Cambiar foto de perfil")}
               <div className="guardia-mobile-header-info">
@@ -3392,109 +3397,7 @@ if (rol === "DIRECTIVA") {
             >
               Resumen del período seleccionado de la urbanización.
             </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <button
-              type="button"
-              disabled={
-                !mesTransparencia ||
-                mesesTransparencia.indexOf(mesTransparencia) <= 0
-              }
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(
-                  mesTransparencia
-                );
-                if (indice > 0) {
-                  setMesTransparencia(
-                    mesesTransparencia[indice - 1]
-                  );
-                }
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 10,
-                padding: "9px 12px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) <= 0
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              ←
-            </button>
-
-            <select
-              value={mesTransparencia}
-              onChange={(e) =>
-                setMesTransparencia(e.target.value)
-              }
-              style={{
-                minWidth: 190,
-                border: "1px solid #cbd5e1",
-                borderRadius: 10,
-                padding: "10px 12px",
-                background: "#fff",
-                fontWeight: 600,
-                color: "#0f172a",
-              }}
-            >
-              {mesesTransparencia.length === 0 ? (
-                <option value="">Sin información</option>
-              ) : (
-                mesesTransparencia.map((mes) => (
-                  <option key={mes} value={mes}>
-                    {formatoMesTransparencia(mes)}
-                  </option>
-                ))
-              )}
-            </select>
-
-            <button
-              type="button"
-              disabled={
-                !mesTransparencia ||
-                mesesTransparencia.indexOf(mesTransparencia) ===
-                  mesesTransparencia.length - 1
-              }
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(
-                  mesTransparencia
-                );
-                if (
-                  indice >= 0 &&
-                  indice < mesesTransparencia.length - 1
-                ) {
-                  setMesTransparencia(
-                    mesesTransparencia[indice + 1]
-                  );
-                }
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 10,
-                padding: "9px 12px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) ===
-                    mesesTransparencia.length - 1
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              →
-            </button>
+            {renderControlesPeriodoDirectiva(mesTransparencia, setMesTransparencia)}
           </div>
         </div>
 
@@ -3506,9 +3409,7 @@ if (rol === "DIRECTIVA") {
             fontWeight: 600,
           }}
         >
-          Período: {formatoMesTransparencia(
-            transparenciaSeleccionada.mes
-          )}
+          Período: {transparenciaSeleccionada.mes}
         </div>
 
         <div
@@ -3532,13 +3433,13 @@ if (rol === "DIRECTIVA") {
           />
 
           <CardPremium
-            titulo="💵 Ingresos totales del mes"
+            titulo="💵 Ingresos totales del período"
             valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
             color="#0f766e"
           />
 
           <CardPremium
-            titulo="🧾 Gastos del mes"
+            titulo="🧾 Gastos del período"
             valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
             color="#dc2626"
             onClick={() =>
@@ -3550,7 +3451,7 @@ if (rol === "DIRECTIVA") {
           />
 
           <CardPremium
-            titulo="📊 Resultado del mes"
+            titulo="📊 Resultado del período"
             valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
             color={
               transparenciaSeleccionada.resultado >= 0
@@ -3562,8 +3463,7 @@ if (rol === "DIRECTIVA") {
           <CardPremium
             titulo="📘 Saldo acumulado anterior"
             valor={`$${(
-              transparenciaSeleccionada.saldoAcumulado -
-              transparenciaSeleccionada.resultado
+              transparenciaSeleccionada.saldoInicial
             ).toFixed(2)}`}
             color="#000000"
           />
@@ -3574,6 +3474,7 @@ if (rol === "DIRECTIVA") {
             color="#7c3aed"
           />
         </div>
+        {renderDetalleMensualTransparencia(transparenciaSeleccionada)}
 
       </div>
 
@@ -3647,7 +3548,35 @@ if (rol === "DIRECTIVA") {
       <div className="directiva-mobile">
         <div className="directiva-mobile-header">
           <div className="directiva-mobile-header-glow" />
-          <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
+          <div
+              className="renalix-mobile-logo-wrap"
+              style={{
+                position: "absolute",
+                top: "50%",
+                right: 12,
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                width: 132,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                borderRadius: 12,
+                padding: 0,
+              }}
+            >
+              <img
+                className="renalix-mobile-logo"
+                src="/branding/renalix-horizontal.png"
+                alt="RENALIX"
+                style={{
+                  width: 122,
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                }}
+              />
+            </div>
           <div className="directiva-mobile-saludo">
             {renderAvatarPerfilMovil("🏛️", "Cambiar foto de perfil")}
             <div className="directiva-mobile-header-info">
@@ -3670,94 +3599,7 @@ if (rol === "DIRECTIVA") {
 
         <div className="directiva-mobile-section">
           <div className="directiva-mobile-section-title">💰 Resumen Financiero</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <button
-              type="button"
-              disabled={!mesTransparenciaDirectivaMovil || mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) <= 0}
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil);
-                if (indice > 0) setMesTransparenciaDirectivaMovil(mesesTransparencia[indice - 1]);
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 9,
-                padding: "8px 11px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparenciaDirectivaMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) <= 0
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              ←
-            </button>
-
-            <select
-              value={mesTransparenciaDirectivaMovil}
-              onChange={(e) => setMesTransparenciaDirectivaMovil(e.target.value)}
-              onInput={(e) =>
-                setMesTransparenciaDirectivaMovil(
-                  (e.target as HTMLSelectElement).value
-                )
-              }
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: "1px solid #cbd5e1",
-                borderRadius: 9,
-                padding: "9px 10px",
-                background: "#fff",
-                fontWeight: 600,
-                color: "#0f172a",
-              }}
-            >
-              {mesesTransparencia.length === 0 ? (
-                <option value="">Sin información</option>
-              ) : (
-                mesesTransparencia.map((mes) => (
-                  <option key={mes} value={mes}>
-                    {formatoMesTransparencia(mes)}
-                  </option>
-                ))
-              )}
-            </select>
-
-            <button
-              type="button"
-              disabled={
-                !mesTransparenciaDirectivaMovil ||
-                mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) ===
-                  mesesTransparencia.length - 1
-              }
-              onClick={() => {
-                const indice = mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil);
-                if (
-                  indice >= 0 &&
-                  indice < mesesTransparencia.length - 1
-                ) {
-                  setMesTransparenciaDirectivaMovil(mesesTransparencia[indice + 1]);
-                }
-              }}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                borderRadius: 9,
-                padding: "8px 11px",
-                cursor: "pointer",
-                opacity:
-                  !mesTransparenciaDirectivaMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaDirectivaMovil) ===
-                    mesesTransparencia.length - 1
-                    ? 0.45
-                    : 1,
-              }}
-            >
-              →
-            </button>
-          </div>
-
+          {renderControlesPeriodoDirectiva(mesTransparenciaDirectivaMovil, setMesTransparenciaDirectivaMovil)}
           <div
             style={{
               fontSize: 14,
@@ -3766,7 +3608,7 @@ if (rol === "DIRECTIVA") {
               marginBottom: 10,
             }}
           >
-            Período: {formatoMesTransparencia(transparenciaSeleccionadaDirectivaMovil.mes)}
+            Período: {transparenciaSeleccionadaDirectivaMovil.mes}
           </div>
 
           <div
@@ -3790,7 +3632,7 @@ if (rol === "DIRECTIVA") {
               <div className="directiva-mobile-icon">
                 <IconoAdminMovil tipo="gastos" />
               </div>
-              <div className="directiva-mobile-card-title">Gastos del mes</div>
+              <div className="directiva-mobile-card-title">Gastos del período</div>
               <div className="directiva-mobile-card-value">
                 ${transparenciaSeleccionadaDirectivaMovil.egresos.toFixed(2)}
               </div>
@@ -3803,7 +3645,7 @@ if (rol === "DIRECTIVA") {
               <div className="directiva-mobile-icon">
                 <IconoAdminMovil tipo="saldo" />
               </div>
-              <div className="directiva-mobile-card-title">Resultado del mes</div>
+              <div className="directiva-mobile-card-title">Resultado del período</div>
               <div
                 className="directiva-mobile-card-value"
                 style={{
@@ -3890,6 +3732,7 @@ if (rol === "DIRECTIVA") {
               <div className="directiva-mobile-arrow">→</div>
             </button>
           </div>
+          {renderDetalleMensualTransparencia(transparenciaSeleccionadaDirectivaMovil)}
         </div>
       </div>
     </>
@@ -3910,7 +3753,37 @@ if (rol === "DIRECTIVA") {
         <div className="admin-mobile">
           <div className="admin-mobile-header">
             <div className="admin-mobile-header-glow" />
-            <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, width: 108, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", borderRadius: 12, padding: 0 }}><img src="/branding/renalix-horizontal.png" alt="RENALIX" style={{ width: 96, maxWidth: "100%", height: "auto", display: "block" }} /></div>
+            
+<div
+              className="renalix-mobile-logo-wrap"
+              style={{
+                position: "absolute",
+                top: "50%",
+                right: 12,
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                width: 132,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                borderRadius: 12,
+                padding: 0,
+              }}
+            >
+              <img
+                className="renalix-mobile-logo"
+                src="/branding/renalix-horizontal.png"
+                alt="RENALIX"
+                style={{
+                  width: 122,
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                }}
+              />
+            </div>
+
             <div className="admin-mobile-saludo">
               {renderAvatarPerfilMovil("👤", "Cambiar foto de perfil")}
               <div className="admin-mobile-header-info">
@@ -3970,6 +3843,7 @@ if (rol === "DIRECTIVA") {
             <div className="admin-mobile-subsection-title">
               <span>📊</span> Indicadores financieros
             </div>
+            {renderControlesPeriodoDirectiva(mesTransparenciaAdminMovil, setMesTransparenciaAdminMovil)}
 
             <div
               style={{
@@ -3979,110 +3853,7 @@ if (rol === "DIRECTIVA") {
                 fontWeight: 600,
               }}
             >
-              Período: {formatoMesTransparencia(
-                transparenciaSeleccionadaAdminMovil.mes
-              )}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 14,
-              }}
-            >
-              <button
-                type="button"
-                disabled={
-                  !mesTransparenciaAdminMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) <= 0
-                }
-                onClick={() => {
-                  const indice = mesesTransparencia.indexOf(
-                    mesTransparenciaAdminMovil
-                  );
-                  if (indice > 0) {
-                    setMesTransparenciaAdminMovil(
-                      mesesTransparencia[indice - 1]
-                    );
-                  }
-                }}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  borderRadius: 10,
-                  padding: "8px 11px",
-                  fontSize: 16,
-                  cursor: "pointer",
-                }}
-              >
-                ←
-              </button>
-
-              <select
-                value={mesTransparenciaAdminMovil}
-                onChange={(e) =>
-                  setMesTransparenciaAdminMovil(e.target.value)
-                }
-                onInput={(e) =>
-                  setMesTransparenciaAdminMovil(
-                    (e.target as HTMLSelectElement).value
-                  )
-                }
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 10,
-                  padding: "9px 10px",
-                  background: "#fff",
-                  fontWeight: 600,
-                  color: "#0f172a",
-                }}
-              >
-                {mesesTransparencia.length === 0 ? (
-                  <option value="">Sin información</option>
-                ) : (
-                  mesesTransparencia.map((mes) => (
-                    <option key={mes} value={mes}>
-                      {formatoMesTransparencia(mes)}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              <button
-                type="button"
-                disabled={
-                  !mesTransparenciaAdminMovil ||
-                  mesesTransparencia.indexOf(mesTransparenciaAdminMovil) ===
-                    mesesTransparencia.length - 1
-                }
-                onClick={() => {
-                  const indice = mesesTransparencia.indexOf(
-                    mesTransparenciaAdminMovil
-                  );
-                  if (
-                    indice >= 0 &&
-                    indice < mesesTransparencia.length - 1
-                  ) {
-                    setMesTransparenciaAdminMovil(
-                      mesesTransparencia[indice + 1]
-                    );
-                  }
-                }}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  borderRadius: 10,
-                  padding: "8px 11px",
-                  fontSize: 16,
-                  cursor: "pointer",
-                }}
-              >
-                →
-              </button>
+              Período: {transparenciaSeleccionadaAdminMovil.mes}
             </div>
 
             <div
@@ -4102,21 +3873,22 @@ if (rol === "DIRECTIVA") {
               </div>
 
               <button type="button" className="admin-mobile-card admin-card-red" onClick={() => router.push("/reportes/gastos")}>
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="gastos" /></div><div className="admin-mobile-card-title">Gastos del período</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.egresos.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Gastos del período seleccionado.</div><div className="admin-mobile-arrow">→</div>
               </button>
 
               <div className="admin-mobile-card admin-card-blue">
-                <div className="admin-mobile-icon">📊</div><div className="admin-mobile-card-title">Resultado del mes</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.resultado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos totales del mes menos gastos del mes.</div>
+                <div className="admin-mobile-icon">📊</div><div className="admin-mobile-card-title">Resultado del período</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.resultado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Ingresos totales del período menos gastos del mes.</div>
               </div>
 
               <div className="admin-mobile-card admin-card-blue">
-                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado anterior</div><div className="admin-mobile-card-value">${(transparenciaSeleccionadaAdminMovil.saldoAcumulado - transparenciaSeleccionadaAdminMovil.resultado).toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo existente antes del período seleccionado.</div>
+                <div className="admin-mobile-icon"><IconoAdminMovil tipo="saldo" /></div><div className="admin-mobile-card-title">Saldo acumulado anterior</div><div className="admin-mobile-card-value">${(transparenciaSeleccionadaAdminMovil.saldoInicial).toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo existente antes del período seleccionado.</div>
               </div>
 
               <div className="admin-mobile-card admin-card-purple">
-                <div className="admin-mobile-icon">💼</div><div className="admin-mobile-card-title">Nuevo saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo acumulado anterior más el resultado del mes.</div>
+                <div className="admin-mobile-icon">💼</div><div className="admin-mobile-card-title">Nuevo saldo acumulado</div><div className="admin-mobile-card-value">${transparenciaSeleccionadaAdminMovil.saldoAcumulado.toFixed(2)}</div><div className="admin-mobile-card-subtitle">Saldo anterior más el resultado del período.</div>
               </div>
             </div>
+            {renderDetalleMensualTransparencia(transparenciaSeleccionadaAdminMovil)}
           </div>
 
           <div className="admin-mobile-section">
@@ -4354,110 +4126,10 @@ if (rol === "DIRECTIVA") {
               >
                 Resumen del período seleccionado de la urbanización.
               </div>
+              {renderControlesPeriodoDirectiva(mesTransparencia, setMesTransparencia)}
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <button
-                type="button"
-                disabled={
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) <= 0
-                }
-                onClick={() => {
-                  const indice = mesesTransparencia.indexOf(
-                    mesTransparencia
-                  );
-                  if (indice > 0) {
-                    setMesTransparencia(
-                      mesesTransparencia[indice - 1]
-                    );
-                  }
-                }}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  borderRadius: 10,
-                  padding: "9px 12px",
-                  cursor: "pointer",
-                  opacity:
-                    !mesTransparencia ||
-                    mesesTransparencia.indexOf(mesTransparencia) <= 0
-                      ? 0.45
-                      : 1,
-                }}
-              >
-                ←
-              </button>
-
-              <select
-                value={mesTransparencia}
-                onChange={(e) =>
-                  setMesTransparencia(e.target.value)
-                }
-                style={{
-                  minWidth: 190,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  background: "#fff",
-                  fontWeight: 600,
-                  color: "#0f172a",
-                }}
-              >
-                {mesesTransparencia.length === 0 ? (
-                  <option value="">Sin información</option>
-                ) : (
-                  mesesTransparencia.map((mes) => (
-                    <option key={mes} value={mes}>
-                      {formatoMesTransparencia(mes)}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              <button
-                type="button"
-                disabled={
-                  !mesTransparencia ||
-                  mesesTransparencia.indexOf(mesTransparencia) ===
-                    mesesTransparencia.length - 1
-                }
-                onClick={() => {
-                  const indice = mesesTransparencia.indexOf(
-                    mesTransparencia
-                  );
-                  if (
-                    indice >= 0 &&
-                    indice < mesesTransparencia.length - 1
-                  ) {
-                    setMesTransparencia(
-                      mesesTransparencia[indice + 1]
-                    );
-                  }
-                }}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  borderRadius: 10,
-                  padding: "9px 12px",
-                  cursor: "pointer",
-                  opacity:
-                    !mesTransparencia ||
-                    mesesTransparencia.indexOf(mesTransparencia) ===
-                      mesesTransparencia.length - 1
-                      ? 0.45
-                      : 1,
-                }}
-              >
-                →
-              </button>
-            </div>
+            
           </div>
 
           <div
@@ -4468,9 +4140,7 @@ if (rol === "DIRECTIVA") {
               fontWeight: 600,
             }}
           >
-            Período: {formatoMesTransparencia(
-              transparenciaSeleccionada.mes
-            )}
+            Período: {transparenciaSeleccionada.mes}
           </div>
 
           <div
@@ -4494,13 +4164,13 @@ if (rol === "DIRECTIVA") {
             />
 
             <CardPremium
-              titulo="💵 Ingresos totales del mes"
+              titulo="💵 Ingresos totales del período"
               valor={`$${transparenciaSeleccionada.ingresos.toFixed(2)}`}
               color="#0f766e"
             />
 
             <CardPremium
-              titulo="🧾 Gastos del mes"
+              titulo="🧾 Gastos del período"
               valor={`$${transparenciaSeleccionada.egresos.toFixed(2)}`}
               color="#dc2626"
               onClick={() =>
@@ -4512,7 +4182,7 @@ if (rol === "DIRECTIVA") {
             />
 
             <CardPremium
-              titulo="📊 Resultado del mes"
+              titulo="📊 Resultado del período"
               valor={`$${transparenciaSeleccionada.resultado.toFixed(2)}`}
               color={
                 transparenciaSeleccionada.resultado >= 0
@@ -4524,8 +4194,7 @@ if (rol === "DIRECTIVA") {
             <CardPremium
               titulo="📘 Saldo acumulado anterior"
               valor={`$${(
-                transparenciaSeleccionada.saldoAcumulado -
-                transparenciaSeleccionada.resultado
+                transparenciaSeleccionada.saldoInicial
               ).toFixed(2)}`}
               color="#000000"
             />
@@ -4536,6 +4205,7 @@ if (rol === "DIRECTIVA") {
               color="#7c3aed"
             />
           </div>
+          {renderDetalleMensualTransparencia(transparenciaSeleccionada)}
 
         </div>
 
@@ -4798,7 +4468,7 @@ const renalixMobileHeaderColorRules = `
     .admin-mobile .admin-mobile-saludo {
       align-items: center !important;
       gap: 12px !important;
-      padding-right: 112px !important;
+      padding-right: 142px !important;
     }
 
     .guardia-mobile .guardia-mobile-header-info,
@@ -4824,6 +4494,71 @@ const renalixMobileHeaderColorRules = `
     .directiva-mobile .directiva-mobile-hola,
     .admin-mobile .admin-mobile-hola {
       font-weight: 800 !important;
+      font-size: 16px !important;
+      line-height: 1.2 !important;
+      margin-bottom: 6px !important;
+    }
+
+    .guardia-mobile .guardia-mobile-condominio,
+    .guardia-mobile .guardia-mobile-rol,
+    .directiva-mobile .directiva-mobile-condominio,
+    .directiva-mobile .directiva-mobile-rol,
+    .admin-mobile .admin-mobile-condominio,
+    .admin-mobile .admin-mobile-rol {
+      font-size: 12.5px !important;
+      line-height: 1.3 !important;
+    }
+
+    .guardia-mobile .renalix-mobile-logo-wrap,
+    .directiva-mobile .renalix-mobile-logo-wrap,
+    .admin-mobile .renalix-mobile-logo-wrap {
+      top: 50% !important;
+      right: 10px !important;
+      width: 132px !important;
+      transform: translateY(-50%) !important;
+    }
+
+    .guardia-mobile .renalix-mobile-logo,
+    .directiva-mobile .renalix-mobile-logo,
+    .admin-mobile .renalix-mobile-logo {
+      width: 122px !important;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .guardia-mobile .guardia-mobile-saludo,
+    .directiva-mobile .directiva-mobile-saludo,
+    .admin-mobile .admin-mobile-saludo {
+      padding-right: 116px !important;
+      gap: 8px !important;
+    }
+
+    .guardia-mobile .guardia-mobile-hola,
+    .directiva-mobile .directiva-mobile-hola,
+    .admin-mobile .admin-mobile-hola {
+      font-size: 15px !important;
+    }
+
+    .guardia-mobile .guardia-mobile-condominio,
+    .guardia-mobile .guardia-mobile-rol,
+    .directiva-mobile .directiva-mobile-condominio,
+    .directiva-mobile .directiva-mobile-rol,
+    .admin-mobile .admin-mobile-condominio,
+    .admin-mobile .admin-mobile-rol {
+      font-size: 11.5px !important;
+    }
+
+    .guardia-mobile .renalix-mobile-logo-wrap,
+    .directiva-mobile .renalix-mobile-logo-wrap,
+    .admin-mobile .renalix-mobile-logo-wrap {
+      width: 108px !important;
+      right: 8px !important;
+    }
+
+    .guardia-mobile .renalix-mobile-logo,
+    .directiva-mobile .renalix-mobile-logo,
+    .admin-mobile .renalix-mobile-logo {
+      width: 100px !important;
     }
   }
 `;

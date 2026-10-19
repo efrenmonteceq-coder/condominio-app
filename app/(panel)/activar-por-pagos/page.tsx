@@ -208,6 +208,13 @@ const [telefono,
       .toUpperCase()
       .trim();
 
+  // URL pública del portal técnico: usa el dominio actual de la instalación.
+  // En desarrollo local, conserva localhost; en producción, usa el dominio desplegado.
+  const urlPortalTecnico =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/panel-tecnico`
+      : "/panel-tecnico";
+
   // 🔥 ESTRELLAS
 
   const renderStars =
@@ -1184,7 +1191,7 @@ if (!response.ok) {
       fontWeight: "bold",
     }}
   >
-    http://localhost:3000/panel-tecnico
+    {urlPortalTecnico}
   </span>
 
   <br />

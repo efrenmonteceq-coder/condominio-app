@@ -61,6 +61,9 @@ export async function POST(req: Request) {
     const telefono = String(body.telefono ?? "").trim();
     const rol = String(body.rol ?? "").trim().toUpperCase();
     const viviendaId = body.vivienda_id ? String(body.vivienda_id) : null;
+    const tiposResidente = ["PROPIETARIO", "INQUILINO", "FAMILIAR", "OTRO_OCUPANTE"] as const;
+    const tipoResidente = String(body.tipo_residente ?? "PROPIETARIO").trim().toUpperCase();
+    const pagaAlicuota = body.paga_alicuota === true;
 
     if (!identificacion || !nombres || !apellidos || !email) {
       return NextResponse.json(
@@ -142,6 +145,13 @@ export async function POST(req: Request) {
     }
 
     if (rol === "RESIDENTE") {
+      if (!tiposResidente.includes(tipoResidente as (typeof tiposResidente)[number])) {
+        return NextResponse.json(
+          { error: "Selecciona un tipo de ocupante válido." },
+          { status: 400 }
+        );
+      }
+
       if (!viviendaId) {
         return NextResponse.json(
           { error: "Selecciona una vivienda para el residente." },
@@ -163,12 +173,6 @@ export async function POST(req: Request) {
         );
       }
 
-      if (vivienda.residente_id) {
-        return NextResponse.json(
-          { error: "La vivienda ya tiene un residente asignado." },
-          { status: 409 }
-        );
-      }
     }
 
     const { data: createdAuth, error: createAuthError } =
@@ -227,7 +231,8 @@ export async function POST(req: Request) {
           identificacion,
           telefono,
           email,
-          tipo: "PROPIETARIO",
+          tipo: tipoResidente,
+          paga_alicuota: pagaAlicuota,
           estado: "ACTIVO",
           fecha_ingreso: new Date().toISOString().slice(0, 10),
           vivienda_id: viviendaId,
@@ -251,6 +256,10 @@ export async function POST(req: Request) {
 
       residenteId = residente.id;
 
+      // viviendas.residente_id es una referencia histórica a un solo usuario.
+      // La relación real de múltiples ocupantes se guarda en residentes.vivienda_id.
+      // Solo completar la referencia histórica si todavía está vacía; no bloquear
+      // la creación de otros residentes en la misma vivienda.
       const { data: viviendaActualizada, error: viviendaUpdateError } =
         await supabaseAdmin
           .from("viviendas")
@@ -261,21 +270,11 @@ export async function POST(req: Request) {
           .select("id")
           .maybeSingle();
 
-      if (viviendaUpdateError || !viviendaActualizada) {
-        await supabaseAdmin.from("residentes").delete().eq("id", residenteId);
-        residenteId = null;
-        await supabaseAdmin.from("usuarios").delete().eq("id", usuarioId);
-        usuarioId = null;
-        await supabaseAdmin.auth.admin.deleteUser(authUserId);
-        authUserId = null;
-
-        return NextResponse.json(
-          { error: "No se pudo asignar la vivienda. Verifica si ya fue ocupada." },
-          { status: 409 }
-        );
+      if (viviendaUpdateError) {
+        console.error("No se pudo actualizar la referencia histórica de vivienda:", viviendaUpdateError);
+      } else if (viviendaActualizada) {
+        viviendaAsignadaId = viviendaId;
       }
-
-      viviendaAsignadaId = viviendaId;
     }
 
     return NextResponse.json({

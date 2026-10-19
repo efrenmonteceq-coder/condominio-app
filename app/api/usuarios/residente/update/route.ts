@@ -51,6 +51,25 @@ export async function PATCH(req: Request) {
     const email = String(body.email ?? "").trim().toLowerCase();
     const telefono = String(body.telefono ?? "").trim();
     const identificacion = String(body.identificacion ?? "").trim();
+    const tiposResidente = ["PROPIETARIO", "INQUILINO", "FAMILIAR", "OTRO_OCUPANTE"] as const;
+    const tipoResidente = body.tipo_residente === undefined
+      ? undefined
+      : String(body.tipo_residente).trim().toUpperCase();
+    const pagaAlicuota = body.paga_alicuota;
+
+    if (tipoResidente !== undefined && !tiposResidente.includes(tipoResidente as (typeof tiposResidente)[number])) {
+      return NextResponse.json(
+        { error: "Selecciona un tipo de ocupante válido." },
+        { status: 400 }
+      );
+    }
+
+    if (pagaAlicuota !== undefined && typeof pagaAlicuota !== "boolean") {
+      return NextResponse.json(
+        { error: "El campo Paga alícuota debe ser verdadero o falso." },
+        { status: 400 }
+      );
+    }
 
     if (
       !residenteId ||
@@ -127,6 +146,8 @@ export async function PATCH(req: Request) {
         email,
         telefono,
         identificacion,
+        ...(tipoResidente !== undefined ? { tipo: tipoResidente } : {}),
+        ...(pagaAlicuota !== undefined ? { paga_alicuota: pagaAlicuota } : {}),
       })
       .eq("usuario_id", target.id)
       .eq("condominio_id", String(actor.condominio_id));

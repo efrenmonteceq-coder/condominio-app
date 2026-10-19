@@ -1066,6 +1066,14 @@ transform: "translateX(0)",
                     icon="📦"
                     label="Paquetería"
                   />
+
+                  {(rol === "RESIDENTE" || rol === "ADMIN") && (
+                    <MenuItem
+                      href="/votaciones"
+                      icon="🗳️"
+                      label="Votaciones"
+                    />
+                  )}
                 </>
               )}
             </Section>
@@ -1113,14 +1121,9 @@ transform: "translateX(0)",
                   <MenuItem
                     href="/pagos"
                     icon="💰"
-                    label="Gestión Financiera"
+                    label="Ingresos"
                   />
 
-                  <MenuItem
-                    href="/votaciones"
-                    icon="🗳️"
-                    label="Votaciones"
-                  />
                 </>
               )}
 
@@ -1130,12 +1133,6 @@ transform: "translateX(0)",
                     href="/pagos"
                     icon="💳"
                     label="Pago de Alícuotas"
-                  />
-
-                  <MenuItem
-                    href="/votaciones"
-                    icon="🗳️"
-                    label="Votaciones"
                   />
                 </>
               )}

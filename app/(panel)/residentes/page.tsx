@@ -38,6 +38,12 @@ export default function Residentes() {
   const [viviendaId, setViviendaId] =
     useState("");
 
+  const [tipoResidente, setTipoResidente] =
+    useState("PROPIETARIO");
+
+  const [pagaAlicuota, setPagaAlicuota] =
+    useState(false);
+
   const [busqueda, setBusqueda] =
     useState("");
 
@@ -96,28 +102,58 @@ export default function Residentes() {
   const cargarResidentes = async () => {
 
     const {
-      data,
-      error,
+      data: usuariosData,
+      error: usuariosError,
     } = await supabase
       .from("usuarios")
       .select("*")
-      .eq(
-        "condominio_id",
-        usuario.condominio_id
-      )
+      .eq("condominio_id", usuario.condominio_id)
       .eq("rol", "RESIDENTE");
 
-    if (error) {
-
-      console.error(
-        "ERROR RESIDENTES:",
-        error.message
-      );
-
+    if (usuariosError) {
+      console.error("ERROR RESIDENTES:", usuariosError.message);
       return;
     }
 
-    setResidentes(data || []);
+    // Mostramos primero los usuarios residentes. Así, un problema de permisos
+    // o de datos en la tabla auxiliar "residentes" no oculta toda la lista.
+    const residentesBase = (usuariosData || []).map((item: any) => ({
+      ...item,
+      ficha_residente: null,
+      tipo_residente: "NO CONFIGURADO",
+      paga_alicuota: false,
+      vivienda_id: item.vivienda_id || null,
+      estado_residente: "SIN FICHA",
+    }));
+    setResidentes(residentesBase);
+
+    const { data: fichasData, error: fichasError } = await supabase
+      .from("residentes")
+      .select("id, usuario_id, vivienda_id, tipo, estado, paga_alicuota, condominio_id")
+      .eq("condominio_id", String(usuario.condominio_id));
+
+    if (fichasError) {
+      // La lista de usuarios ya está visible; solo registramos el fallo de los
+      // datos complementarios para no dejar la pantalla falsamente vacía.
+      console.error("ERROR FICHAS DE RESIDENTES:", fichasError.message);
+      return;
+    }
+
+    const fichasPorUsuario = new Map<string, any>();
+    (fichasData || []).forEach((ficha: any) => {
+      if (ficha.usuario_id) fichasPorUsuario.set(ficha.usuario_id, ficha);
+    });
+
+    const usuariosConFicha = (usuariosData || []).map((item: any) => ({
+      ...item,
+      ficha_residente: fichasPorUsuario.get(item.id) || null,
+      tipo_residente: fichasPorUsuario.get(item.id)?.tipo || "NO CONFIGURADO",
+      paga_alicuota: fichasPorUsuario.get(item.id)?.paga_alicuota === true,
+      vivienda_id: fichasPorUsuario.get(item.id)?.vivienda_id || item.vivienda_id || null,
+      estado_residente: fichasPorUsuario.get(item.id)?.estado || "SIN FICHA",
+    }));
+
+    setResidentes(usuariosConFicha);
 
   };
 
@@ -189,6 +225,10 @@ headers: {
 
   vivienda_id:
     viviendaId,
+
+  tipo_residente: tipoResidente,
+
+  paga_alicuota: pagaAlicuota,
 
 }),
 
@@ -272,6 +312,29 @@ headers: {
 
     if (nuevaIdentificacion === null) return;
 
+    const tipoActual = String(residente.tipo_residente || "PROPIETARIO").toUpperCase();
+    const nuevoTipo = prompt(
+      "Tipo de ocupante: PROPIETARIO, INQUILINO, FAMILIAR u OTRO_OCUPANTE",
+      tipoActual
+    );
+    if (nuevoTipo === null) return;
+    const tipoNormalizado = nuevoTipo.trim().toUpperCase();
+    if (!["PROPIETARIO", "INQUILINO", "FAMILIAR", "OTRO_OCUPANTE"].includes(tipoNormalizado)) {
+      alert("Tipo inválido. Usa PROPIETARIO, INQUILINO, FAMILIAR u OTRO_OCUPANTE.");
+      return;
+    }
+
+    const pagaRespuesta = prompt(
+      "¿Paga alícuota? Escribe SI o NO",
+      residente.paga_alicuota ? "SI" : "NO"
+    );
+    if (pagaRespuesta === null) return;
+    const pagaNormalizado = pagaRespuesta.trim().toUpperCase();
+    if (!["SI", "SÍ", "NO"].includes(pagaNormalizado)) {
+      alert("Respuesta inválida. Escribe SI o NO.");
+      return;
+    }
+
     try {
       const { data: sessionData, error: sessionError } =
         await supabase.auth.getSession();
@@ -294,6 +357,8 @@ headers: {
           email: nuevoEmail.trim(),
           telefono: nuevoTelefono.trim(),
           identificacion: nuevaIdentificacion.trim(),
+          tipo_residente: tipoNormalizado,
+          paga_alicuota: ["SI", "SÍ"].includes(pagaNormalizado),
         }),
       });
 
@@ -370,6 +435,8 @@ headers: {
     setIdentificacion("");
 
     setViviendaId("");
+    setTipoResidente("PROPIETARIO");
+    setPagaAlicuota(false);
 
   };
 
@@ -637,6 +704,32 @@ headers: {
 
             </select>
 
+            <select
+              value={tipoResidente}
+              onChange={(e) => setTipoResidente(e.target.value)}
+              style={{
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "1px solid #d1d5db",
+                fontSize: 15,
+                background: "#fff",
+              }}
+            >
+              <option value="PROPIETARIO">Propietario</option>
+              <option value="INQUILINO">Inquilino</option>
+              <option value="FAMILIAR">Familiar</option>
+              <option value="OTRO_OCUPANTE">Otro ocupante</option>
+            </select>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 10, color: "#374151", fontSize: 15 }}>
+              <input
+                type="checkbox"
+                checked={pagaAlicuota}
+                onChange={(e) => setPagaAlicuota(e.target.checked)}
+              />
+              Paga alícuota (se aplicará también al acceso en el siguiente paso)
+            </label>
+
           </div>
 
           <div
@@ -832,6 +925,28 @@ headers: {
                 <span>
                   🪪 {r.identificacion}
                 </span>
+                <span>
+                  🏠 Vivienda: {viviendas.find((v) => v.id === r.vivienda_id)?.codigo_vivienda || "Sin vivienda vinculada"}
+                </span>
+                
+<span>
+  👤 Tipo: {{
+    PROPIETARIO: "Propietario",
+    INQUILINO: "Inquilino",
+    FAMILIAR: "Familiar",
+    OTRO_OCUPANTE: "Otro ocupante",
+  }[
+    String(r.tipo_residente ?? "").toUpperCase().trim() as
+      | "PROPIETARIO"
+      | "INQUILINO"
+      | "FAMILIAR"
+      | "OTRO_OCUPANTE"
+  ] || r.tipo_residente || "No configurado"}
+</span>
+
+                <span style={{ color: r.paga_alicuota ? "#166534" : "#b91c1c", fontWeight: 600 }}>
+                  {r.paga_alicuota ? "✓ Habilitado para pagar alícuota" : "✕ No habilitado para pagar alícuota"}
+                </span>
 
               </div>
 
@@ -842,9 +957,9 @@ headers: {
                   marginTop: 16,
                   display: "inline-block",
                   background:
-                    "#dcfce7",
+                    r.activo ? "#dcfce7" : "#fee2e2",
                   color:
-                    "#166534",
+                    r.activo ? "#166534" : "#991b1b",
                   padding:
                     "6px 12px",
                   borderRadius: 999,
@@ -853,7 +968,7 @@ headers: {
                     "bold",
                 }}
               >
-                RESIDENTE ACTIVO
+                {r.activo ? "RESIDENTE ACTIVO" : "RESIDENTE INACTIVO"}
               </div>
 
               {/* 🔥 BOTONES */}

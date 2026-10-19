@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export function useAuth() {
   const [usuario, setUsuario] =
@@ -8,32 +9,16 @@ export function useAuth() {
     useState(true);
 
   useEffect(() => {
-    // 🔥 LEER LOCALSTORAGE
-    const data =
-      localStorage.getItem("usuario");
+    let cancelado = false;
 
-    if (!data) {
-      console.warn(
-        "No hay usuario → redirigiendo"
-      );
+    const validarSesion = async () => {
+      // Conserva la comprobación inicial del perfil local.
+      const data =
+        localStorage.getItem("usuario");
 
-      window.location.href =
-        "/login";
-
-      return;
-    }
-
-    try {
-      const user = JSON.parse(data);
-
-      // 🔥 VALIDAR USUARIO
-      if (!user) {
+      if (!data) {
         console.warn(
-          "Usuario inválido"
-        );
-
-        localStorage.removeItem(
-          "usuario"
+          "No hay usuario → redirigiendo"
         );
 
         window.location.href =
@@ -42,53 +27,121 @@ export function useAuth() {
         return;
       }
 
-      // 🔥 SUPER ADMIN NO NECESITA CONDOMINIO
-      if (
-        user.rol !== "SUPER_ADMIN" &&
-        !user.condominio_id
-      ) {
-        console.warn(
-          "Usuario sin condominio"
+      try {
+        const userLocal = JSON.parse(data);
+
+        if (!userLocal) {
+          throw new Error("Usuario inválido.");
+        }
+
+        // SUPER_ADMIN no necesita condominio.
+        if (
+          userLocal.rol !== "SUPER_ADMIN" &&
+          !userLocal.condominio_id
+        ) {
+          throw new Error("Usuario sin condominio.");
+        }
+
+        // Verifica que exista una sesión real de Supabase.
+        const {
+          data: { session },
+          error: errorSesion,
+        } = await supabase.auth.getSession();
+
+        if (errorSesion || !session?.access_token) {
+          localStorage.removeItem("usuario");
+          await supabase.auth.signOut();
+
+          if (!cancelado) {
+            window.location.href = "/login";
+          }
+          return;
+        }
+
+        // Comprueba el estado actual de la cuenta en el servidor.
+        const response = await fetch(
+          "/api/auth/validar-sesion",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            cache: "no-store",
+          }
         );
 
-        localStorage.removeItem(
-          "usuario"
-        );
+        const resultado = await response.json().catch(() => null);
 
-        window.location.href =
-          "/login";
+        if (!response.ok || !resultado?.success || !resultado?.usuario) {
+          // Una denegación (401/403) significa que la sesión ya no está
+          // autorizada. En errores 5xx no borramos los tokens locales,
+          // aunque no permitimos continuar dentro de la página protegida.
+          if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem("usuario");
+            await supabase.auth.signOut();
+          }
 
-        return;
+          throw new Error(
+            resultado?.error ||
+              "No se pudo validar la sesión. Intenta nuevamente."
+          );
+        }
+
+        const user = resultado.usuario;
+
+        if (
+          user.rol !== "SUPER_ADMIN" &&
+          !user.condominio_id
+        ) {
+          localStorage.removeItem("usuario");
+          await supabase.auth.signOut();
+          throw new Error("Usuario sin condominio.");
+        }
+
+        if (cancelado) return;
+
+        // Actualiza el perfil local con datos verificados por el servidor.
+        localStorage.setItem("usuario", JSON.stringify(user));
+        setUsuario(user);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error validando sesión:", error);
+
+        if (cancelado) return;
+
+        // No mostramos contenido protegido si no se pudo validar.
+        setUsuario(null);
+        setLoading(false);
+
+        // Solo redirige automáticamente cuando la sesión fue revocada
+        // o no se pudo autenticar. En errores temporales del servidor,
+        // la pantalla no debe seguir mostrando el contenido protegido.
+        const mensaje =
+          error instanceof Error ? error.message : "";
+
+        if (
+          mensaje === "Usuario inválido." ||
+          mensaje === "Usuario sin condominio."
+        ) {
+          localStorage.removeItem("usuario");
+          await supabase.auth.signOut();
+          window.location.href = "/login";
+        }
       }
+    };
 
-      setUsuario(user);
-    } catch (error) {
-      console.error(
-        "Error leyendo usuario:",
-        error
-      );
+    void validarSesion();
 
-      localStorage.removeItem(
-        "usuario"
-      );
-
-      window.location.href =
-        "/login";
-
-      return;
-    }
-
-    setLoading(false);
+    return () => {
+      cancelado = true;
+    };
   }, []);
 
-  // 🔥 LOGOUT
-  const logout = () => {
-    localStorage.removeItem(
-      "usuario"
-    );
-
-    window.location.href =
-      "/login";
+  // Cerrar sesión en RENALIX y en Supabase.
+  const logout = async () => {
+    localStorage.removeItem("usuario");
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   };
 
   return {

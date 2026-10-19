@@ -186,17 +186,19 @@ console.log(
 
   useEffect(() => {
 
-  if (
-    solicitudId
-  ) {
+    if (loading || !usuario?.condominio_id || !solicitudId) {
+      return;
+    }
 
-    cargarSolicitudAprobada();
+    void cargarSolicitudAprobada();
 
-  }
-
-}, [solicitudId]);
+  }, [solicitudId, usuario?.condominio_id, loading]);
 
 async function cargarSolicitudAprobada() {
+
+  if (!solicitudId || !usuario?.condominio_id) {
+    return;
+  }
 
   const {
     data,
@@ -210,6 +212,8 @@ async function cargarSolicitudAprobada() {
       "id",
       solicitudId
     )
+    .eq("condominio_id", usuario?.condominio_id)
+    .eq("estado", "APROBADO")
     .single();
 
   if (
@@ -455,8 +459,8 @@ async function cargarMontoMaximo() {
           } = await supabase
             .from("gastos_administrativos")
             .select("id")
-            .eq("solicitud_id", solicitudId)
             .eq("condominio_id", usuario.condominio_id)
+            .or(`solicitud_id.eq.${solicitudId},solicitud_gasto_id.eq.${solicitudId}`)
             .maybeSingle();
 
           if (errorGastoExistente) {
@@ -481,6 +485,21 @@ async function cargarMontoMaximo() {
           }
 
         }
+
+        // Una solicitud aprobada autoriza el gasto hasta el subtotal aprobado.
+        // El IVA se calcula aparte. Si no hay solicitud aprobada válida, se
+        // conserva el flujo normal basado en el límite administrativo.
+        const solicitudValida = Boolean(solicitudId) &&
+          solicitudAprobada?.estado === "APROBADO" &&
+          String(solicitudAprobada?.condominio_id) === String(usuario.condominio_id);
+        const subtotalNumero = Number(subtotal || 0);
+        const valorAprobado = Number(solicitudAprobada?.valor_solicitado || 0);
+        const subtotalDentroDeAprobacion = solicitudValida &&
+          Number.isFinite(subtotalNumero) && subtotalNumero > 0 &&
+          Number.isFinite(valorAprobado) && subtotalNumero <= valorAprobado + 0.01;
+        const requiereAprobacion = subtotalDentroDeAprobacion
+          ? false
+          : total > montoMaximoAdmin;
 
         // 🔥 INSERT
 
@@ -517,13 +536,8 @@ async function cargarMontoMaximo() {
           valor:
             total,
 
-            requiere_aprobacion:
-  total > montoMaximoAdmin,
-
-estado_aprobacion:
-  total > montoMaximoAdmin
-    ? "PENDIENTE"
-    : "APROBADO",
+          requiere_aprobacion: requiereAprobacion,
+          estado_aprobacion: requiereAprobacion ? "PENDIENTE" : "APROBADO",
 
           fecha_emision:
             fechaEmision || null,
@@ -582,37 +596,31 @@ estado_aprobacion:
         // como ejecutada únicamente después de haber registrado el gasto.
         if (solicitudId) {
 
-          const { error: errorSolicitud } =
+          const { data: solicitudActualizada, error: errorSolicitud } =
             await supabase
               .from("solicitudes_gastos")
               .update({
                 ejecutado: true,
+                gasto_administrativo_id: gastoInsertado.id,
+                fecha_ejecucion: new Date().toISOString(),
               })
               .eq("id", solicitudId)
               .eq("condominio_id", usuario.condominio_id)
-              .eq("estado", "APROBADO");
+              .eq("estado", "APROBADO")
+              .select("id")
+              .maybeSingle();
 
-          if (errorSolicitud) {
-
+          if (errorSolicitud || !solicitudActualizada) {
             console.error(
-              "❌ Error marcando la solicitud como ejecutada:",
+              "❌ El gasto se insertó, pero no se pudo vincular con la solicitud:",
               errorSolicitud
             );
-
-            // Intentamos deshacer el gasto recién creado para no dejar
-            // una factura registrada sin su solicitud cerrada.
-            await supabase
-              .from("gastos_administrativos")
-              .delete()
-              .eq("id", gastoInsertado.id)
-              .eq("condominio_id", usuario.condominio_id);
-
+            // No borrar automáticamente un registro contable recién creado.
             alert(
-              "No se pudo cerrar la solicitud aprobada. El gasto no quedó registrado."
+              `La factura se creó con ID ${gastoInsertado.id}, pero no se pudo actualizar la solicitud. No vuelvas a registrar esta factura; debe revisarse el vínculo.`
             );
-
+            await cargarGastos();
             return;
-
           }
 
         }

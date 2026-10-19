@@ -580,7 +580,7 @@ export default function Viviendas() {
           >
 
             <Input
-              placeholder="Código vivienda"
+              placeholder="Manzana y villa (ej.: Mz. 5, Villa 12)"
               value={codigo}
               onChange={(e: any) =>
                 setCodigo(
@@ -744,7 +744,7 @@ export default function Viviendas() {
         >
 
           <input
-            placeholder="Buscar código vivienda"
+            placeholder="Buscar por manzana y villa"
             value={busqueda}
             onChange={(e) =>
               setBusqueda(

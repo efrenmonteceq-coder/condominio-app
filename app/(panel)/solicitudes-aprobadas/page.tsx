@@ -98,7 +98,7 @@ export default function SolicitudesAprobadas() {
       error: errorGastos,
     } = await supabase
       .from("gastos_administrativos")
-      .select("categoria, proveedor, descripcion, subtotal, total, valor, numero_factura, fecha_gasto, solicitud_id")
+      .select("id, categoria, proveedor, descripcion, subtotal, total, valor, numero_factura, fecha_gasto, solicitud_id, solicitud_gasto_id")
       .eq("condominio_id", usuario?.condominio_id);
 
     if (errorGastos) {
@@ -215,64 +215,14 @@ export default function SolicitudesAprobadas() {
     solicitud: any,
     gastosDisponibles: any[]
   ) {
-    if (solicitud?.ejecutado === true) {
-      return true;
-    }
-
-    // ✅ Relación contable exacta. Una factura solo pertenece a esta solicitud
-    // cuando gastos_administrativos.solicitud_id coincide exactamente con
-    // solicitudes_gastos.id. No se usan montos, textos ni similitudes.
+    // No confiar únicamente en ejecutado=true: exigir una relación verificable.
     return gastosDisponibles.some((gasto) => {
-      const mismaSolicitud =
-        gasto?.solicitud_id != null &&
-        String(gasto.solicitud_id) === String(solicitud?.id);
-
-      if (!mismaSolicitud) {
-        return false;
-      }
-
-      // Se conserva la estructura anterior del archivo, pero estas comprobaciones
-      // ya no deciden si la factura corresponde o no a la solicitud.
-      const comprobacionLegada = mismoValorAprobado(
-        solicitud,
-        gasto
-      );
-      void comprobacionLegada;
-
-      const categoriaSolicitud = normalizarTexto(
-        solicitud?.categoria
-      );
-      const proveedorSolicitud = normalizarTexto(
-        solicitud?.proveedor_sugerido
-      );
-      const descripcionSolicitud = normalizarTexto(
-        solicitud?.descripcion
-      );
-
-      const coincideProveedor = coincideTexto(
-        proveedorSolicitud,
-        gasto?.proveedor
-      );
-      const coincideCategoria = coincideTexto(
-        categoriaSolicitud,
-        gasto?.categoria
-      );
-      const coincideDescripcion = coincideTexto(
-        descripcionSolicitud,
-        gasto?.descripcion
-      );
-
-      const coincidencias = [
-        coincideProveedor,
-        coincideCategoria,
-        coincideDescripcion,
-      ].filter(Boolean).length;
-
-      // Estas variables se mantienen para no alterar la estructura del archivo.
-      // La identidad exacta de solicitud_id es la única condición determinante.
+      const idSolicitud = String(solicitud?.id || "");
+      if (!idSolicitud) return false;
       return (
-        mismaSolicitud &&
-        coincidencias >= 0
+        String(gasto?.solicitud_id || "") === idSolicitud ||
+        String(gasto?.solicitud_gasto_id || "") === idSolicitud ||
+        String(solicitud?.gasto_administrativo_id || "") === String(gasto?.id || "")
       );
     });
   }
@@ -636,14 +586,27 @@ export default function SolicitudesAprobadas() {
                   >
                     ✅ Factura registrada
                   </button>
+                ) : solicitud?.ejecutado === true ? (
+                  <button
+                    type="button"
+                    disabled
+                    title="La solicitud figura ejecutada, pero no se encontró un gasto vinculado por ID."
+                    style={{
+                      background: "#d97706",
+                      color: "#fff",
+                      border: "none",
+                      padding: "12px 20px",
+                      borderRadius: 10,
+                      cursor: "not-allowed",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    ⚠️ Revisar vinculación
+                  </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() =>
-                      registrarFactura(
-                        solicitud
-                      )
-                    }
+                    onClick={() => registrarFactura(solicitud)}
                     style={{
                       background: "#2563eb",
                       color: "#fff",

@@ -33,22 +33,43 @@ export default function Pagos() {
   // 📅 PERÍODO DE CONSULTA FINANCIERA
   const [periodoGestion, setPeriodoGestion] =
     useState("");
+  const [tipoConsulta, setTipoConsulta] = useState("MES");
+  const [trimestreConsulta, setTrimestreConsulta] = useState("1");
+  const [semestreConsulta, setSemestreConsulta] = useState("1");
+  const [fechaDesdeConsulta, setFechaDesdeConsulta] = useState("");
+  const [fechaHastaConsulta, setFechaHastaConsulta] = useState("");
 
-  const [referenciaPago,
-    setReferenciaPago] =
-    useState("");
+  // Cada alícuota conserva su propio formulario de pago, identificado por el ID del registro.
+  type FormularioPagoResidente = {
+    referenciaPago: string;
+    banco: string;
+    fechaTransferencia: string;
+    comprobante: any;
+  };
 
-  const [banco,
-    setBanco] =
-    useState("");
+  const [formulariosPago, setFormulariosPago] =
+    useState<Record<string, FormularioPagoResidente>>({});
 
-  const [fechaTransferencia,
-    setFechaTransferencia] =
-    useState("");
+  const obtenerFormularioPago = (pagoId: string): FormularioPagoResidente =>
+    formulariosPago[pagoId] || {
+      referenciaPago: "",
+      banco: "",
+      fechaTransferencia: "",
+      comprobante: null,
+    };
 
-  const [comprobante,
-    setComprobante] =
-    useState<any>(null);
+  const actualizarFormularioPago = (
+    pagoId: string,
+    cambios: Partial<FormularioPagoResidente>
+  ) => {
+    setFormulariosPago((actuales) => ({
+      ...actuales,
+      [pagoId]: {
+        ...obtenerFormularioPago(pagoId),
+        ...cambios,
+      },
+    }));
+  };
 
   const [busqueda,
     setBusqueda] =
@@ -693,6 +714,7 @@ export default function Pagos() {
       setPeriodoGestion(
         `${anioInicial}-${mesInicial}`
       );
+      setPeriodoMasivo((actual) => actual || `${anioInicial}-${mesInicial}`);
     }
   }, [
     rol,
@@ -700,28 +722,7 @@ export default function Pagos() {
     periodoGestion,
   ]);
 
-  const otrosIngresosDelPeriodo =
-    useMemo(() => {
-      if (rol !== "ADMIN") return otrosIngresos;
 
-      return otrosIngresos.filter((ingreso) =>
-        String(ingreso.fecha_movimiento || "").startsWith(periodoGestion)
-      );
-    }, [otrosIngresos, periodoGestion, rol]);
-
-  const resumenOtrosIngresos =
-    useMemo(() => {
-
-      return otrosIngresosDelPeriodo.reduce(
-        (acumulado, ingreso) =>
-          acumulado +
-          (ingreso?.tipo_documento === "COMPROBANTE_INTERNO"
-            ? Number(ingreso?.subtotal || 0)
-            : Number(ingreso?.total || 0)),
-        0
-      );
-
-    }, [otrosIngresosDelPeriodo]);
 
   // 🔥 ALICUOTAS
 
@@ -976,6 +977,9 @@ export default function Pagos() {
       pago: any
     ) => {
 
+    const formulario = obtenerFormularioPago(String(pago.id));
+    const { referenciaPago, banco, fechaTransferencia, comprobante } = formulario;
+
     if (
       !referenciaPago ||
       !banco ||
@@ -1051,13 +1055,11 @@ export default function Pagos() {
       "Pago enviado"
     );
 
-    setReferenciaPago("");
-
-    setBanco("");
-
-    setFechaTransferencia("");
-
-    setComprobante(null);
+    setFormulariosPago((actuales) => {
+      const siguientes = { ...actuales };
+      delete siguientes[String(pago.id)];
+      return siguientes;
+    });
 
     cargarPagos();
 
@@ -1122,16 +1124,78 @@ export default function Pagos() {
     return "";
   };
 
-  const pagosDelPeriodo =
-    useMemo(() => {
-      if (rol !== "ADMIN" || !periodoGestion) return pagos;
+  const rangoConsulta = useMemo(() => {
+    const [anioTexto, mesTexto] = (periodoGestion || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`).split("-");
+    const anio = Number(anioTexto) || new Date().getFullYear();
+    const mes = Number(mesTexto) || new Date().getMonth() + 1;
+    let inicio = `${anio}-${String(mes).padStart(2, "0")}-01`;
+    let fin = `${anio}-${String(new Date(anio, mes, 0).getDate()).padStart(2, "0")}`;
 
-      return pagos.filter(
-        (p) =>
-          obtenerPeriodoFinanciero(p) ===
-          periodoGestion
+    if (tipoConsulta === "TRIMESTRE") {
+      const mesInicio = (Number(trimestreConsulta) - 1) * 3 + 1;
+      inicio = `${anio}-${String(mesInicio).padStart(2, "0")}-01`;
+      fin = `${anio}-${String(mesInicio + 2).padStart(2, "0")}-${String(new Date(anio, mesInicio + 2, 0).getDate()).padStart(2, "0")}`;
+    } else if (tipoConsulta === "SEMESTRE") {
+      const mesInicio = Number(semestreConsulta) === 1 ? 1 : 7;
+      inicio = `${anio}-${String(mesInicio).padStart(2, "0")}-01`;
+      fin = Number(semestreConsulta) === 1 ? `${anio}-06-30` : `${anio}-12-31`;
+    } else if (tipoConsulta === "ANIO") {
+      inicio = `${anio}-01-01`;
+      fin = `${anio}-12-31`;
+    } else if (tipoConsulta === "PERSONALIZADO") {
+      inicio = fechaDesdeConsulta || inicio;
+      fin = fechaHastaConsulta || fin;
+    }
+    return { inicio, fin };
+  }, [periodoGestion, tipoConsulta, trimestreConsulta, semestreConsulta, fechaDesdeConsulta, fechaHastaConsulta]);
+
+
+  const otrosIngresosDelPeriodo =
+    useMemo(() => {
+      if (rol !== "ADMIN") return otrosIngresos;
+
+      return otrosIngresos.filter((ingreso) => {
+        const fecha = String(ingreso.fecha_movimiento || "").slice(0, 10);
+        return fecha >= rangoConsulta.inicio && fecha <= rangoConsulta.fin;
+      });
+    }, [otrosIngresos, rangoConsulta, rol]);
+
+  const resumenOtrosIngresos =
+    useMemo(() => {
+
+      return otrosIngresosDelPeriodo.reduce(
+        (acumulado, ingreso) =>
+          acumulado +
+          (ingreso?.tipo_documento === "COMPROBANTE_INTERNO"
+            ? Number(ingreso?.subtotal || 0)
+            : Number(ingreso?.total || 0)),
+        0
       );
-    }, [pagos, periodoGestion, rol]);
+
+    }, [otrosIngresosDelPeriodo]);
+  const pagosDelPeriodo = useMemo(() => {
+    if (rol !== "ADMIN") return pagos;
+    return pagos.filter((p) => {
+      if (tipoConsulta === "PERSONALIZADO") {
+        const fechaReferencia = String(p.fecha_vencimiento || p.fecha_pago || p.created_at || "").slice(0, 10);
+        return fechaReferencia && fechaReferencia >= rangoConsulta.inicio && fechaReferencia <= rangoConsulta.fin;
+      }
+      const periodo = obtenerPeriodoFinanciero(p);
+      return periodo && periodo >= rangoConsulta.inicio.slice(0, 7) && periodo <= rangoConsulta.fin.slice(0, 7);
+    });
+  }, [pagos, rangoConsulta, rol, tipoConsulta]);
+
+  // La recaudación se atribuye al mes en que se recibió el dinero,
+  // no al mes de la alícuota que originó la deuda.
+  const pagosRecaudadosDelPeriodo = useMemo(() => {
+    if (rol !== "ADMIN" || !periodoGestion) return pagos;
+
+    return pagos.filter((p) => {
+      const fechaDia = String(p.fecha_pago || p.created_at || "").slice(0, 10);
+      return fechaDia >= rangoConsulta.inicio && fechaDia <= rangoConsulta.fin &&
+        Number(p.valor_pagado || 0) > 0;
+    });
+  }, [pagos, rangoConsulta, rol]);
 
   const terminoBusqueda =
     busqueda.trim().toLowerCase();
@@ -1179,7 +1243,7 @@ export default function Pagos() {
       let vencido = 0;
       let recaudado = 0;
 
-      pagosDelPeriodo.forEach((p) => {
+      pagos.forEach((p) => {
 
         const valor = Number(p.valor || 0);
         const valorPagado = Number(
@@ -1188,9 +1252,6 @@ export default function Pagos() {
 
         // Total facturado del período.
         total += valor;
-
-        // Total efectivamente recaudado.
-        recaudado += valorPagado;
 
         // Pendiente = facturado - pagado.
         const saldoPendiente = Math.max(
@@ -1226,6 +1287,13 @@ export default function Pagos() {
 
       });
 
+      // Total efectivamente recaudado durante el mes seleccionado,
+      // aunque la alícuota corresponda a un mes anterior.
+      recaudado = pagosRecaudadosDelPeriodo.reduce(
+        (acumulado, p) => acumulado + Number(p.valor_pagado || 0),
+        0
+      );
+
       return {
         total,
         pendiente,
@@ -1233,7 +1301,7 @@ export default function Pagos() {
         recaudado,
       };
 
-    }, [pagosDelPeriodo]);
+    }, [pagos, pagosRecaudadosDelPeriodo]);
 
   // 💰 Total recaudado financiero del período: alícuotas + otros ingresos.
   // Los comprobantes internos aportan únicamente su valor real registrado,
@@ -1305,7 +1373,7 @@ export default function Pagos() {
           >
             {rol === "RESIDENTE"
               ? "Consulte sus obligaciones y registre sus pagos."
-              : "Control administrativo y financiero del condominio"}
+              : "Control administrativo y financiero de la Urbanizaciòn"}
           </p>
 
         </div>
@@ -1339,7 +1407,7 @@ export default function Pagos() {
           style={{
             background: "#fff",
             borderRadius: 20,
-            padding: 18,
+            padding: 12,
             marginBottom: 22,
             boxShadow: "0 8px 20px rgba(0,0,0,0.05)",
             border: "1px solid #e5e7eb",
@@ -1352,7 +1420,7 @@ export default function Pagos() {
         >
           <div>
             <strong style={{ color: "#111827", fontSize: 16 }}>
-              📅 Período de consulta
+              📅 Consulta
             </strong>
             <div
               style={{
@@ -1361,18 +1429,19 @@ export default function Pagos() {
                 fontSize: 13,
               }}
             >
-              Seleccione el mes que desea consultar. Los valores financieros mostrados corresponden únicamente a este período.
+Filtre ingresos por período; la cartera pendiente y vencida refleja todos los meses.
             </div>
           </div>
 
           <div
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
+            style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
           >
+            <select value={tipoConsulta} onChange={(e) => setTipoConsulta(e.target.value)} aria-label="Tipo de período" style={{ ...inputStyle, padding: "8px 10px", minWidth: 125, fontSize: 13, borderRadius: 9, cursor: "pointer" }}>
+              <option value="MES">Mes</option><option value="TRIMESTRE">Trimestre</option><option value="SEMESTRE">Semestre</option><option value="ANIO">Año completo</option><option value="PERSONALIZADO">Personalizado</option>
+            </select>
+            {tipoConsulta === "TRIMESTRE" && <select value={trimestreConsulta} onChange={(e) => setTrimestreConsulta(e.target.value)} style={{ ...inputStyle, padding: "8px 10px", minWidth: 110, fontSize: 13, borderRadius: 9 }}><option value="1">1.er trimestre</option><option value="2">2.º trimestre</option><option value="3">3.er trimestre</option><option value="4">4.º trimestre</option></select>}
+            {tipoConsulta === "SEMESTRE" && <select value={semestreConsulta} onChange={(e) => setSemestreConsulta(e.target.value)} style={{ ...inputStyle, padding: "8px 10px", minWidth: 110, fontSize: 13, borderRadius: 9 }}><option value="1">1.er semestre</option><option value="2">2.º semestre</option></select>}
+            {tipoConsulta === "PERSONALIZADO" && <><input aria-label="Desde" type="date" value={fechaDesdeConsulta} onChange={(e) => setFechaDesdeConsulta(e.target.value)} style={{ ...inputStyle, padding: "8px 10px", fontSize: 13, borderRadius: 9 }} /><input aria-label="Hasta" type="date" value={fechaHastaConsulta} onChange={(e) => setFechaHastaConsulta(e.target.value)} style={{ ...inputStyle, padding: "8px 10px", fontSize: 13, borderRadius: 9 }} /></>}
             <select
               value={periodoGestion.split("-")[0] || ""}
               onChange={(e) => {
@@ -1386,7 +1455,6 @@ export default function Pagos() {
                     : "";
 
                 setPeriodoGestion(nuevoPeriodo);
-                setPeriodoMasivo(nuevoPeriodo);
                 setMostrarHistorial(false);
                 setBusqueda("");
               }}
@@ -1404,7 +1472,7 @@ export default function Pagos() {
               ))}
             </select>
 
-            <select
+            {tipoConsulta === "MES" && <select
               value={periodoGestion.split("-")[1] || ""}
               onChange={(e) => {
                 const nuevoMes = e.target.value;
@@ -1417,7 +1485,6 @@ export default function Pagos() {
                     : "";
 
                 setPeriodoGestion(nuevoPeriodo);
-                setPeriodoMasivo(nuevoPeriodo);
                 setMostrarHistorial(false);
                 setBusqueda("");
               }}
@@ -1434,7 +1501,7 @@ export default function Pagos() {
                   {mes.nombre}
                 </option>
               ))}
-            </select>
+            </select>}
           </div>
         </div>
       )}
@@ -1462,7 +1529,7 @@ export default function Pagos() {
             <Card
               titulo="💰 Otros ingresos"
               valor={`$${resumenOtrosIngresos.toFixed(2)}`}
-              nota="Ingresos del condominio diferentes de las alícuotas, como alquileres, servicios, reciclaje u otros conceptos."
+              nota="Ingresos de la Urbanizaciòn diferentes de las alícuotas, como alquileres, servicios, reciclaje u otros conceptos."
             />
 
             <Card
@@ -2211,7 +2278,7 @@ export default function Pagos() {
               lineHeight: 1.6,
             }}
           >
-            Genere automáticamente las alícuotas correspondientes al período seleccionado para todos los residentes que tengan una vivienda registrada en el condominio.
+            Genere automáticamente las alícuotas correspondientes al período seleccionado para todos los residentes que tengan una vivienda registrada en la Urbanizaciòn.
           </p>
 
           <div
@@ -2223,21 +2290,22 @@ export default function Pagos() {
               flexWrap: "wrap",
             }}
           >
-            <div
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                background: "#eff6ff",
-                color: "#1e3a8a",
-                fontWeight: "bold",
-              }}
-            >
-              📅 Período: {periodoGestion || "Cargando períodos disponibles..."}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <label htmlFor="periodo-generacion-alicuotas" style={{ color: "#1e3a8a", fontWeight: "bold", fontSize: 13 }}>
+                📅 Generar período
+              </label>
+              <input
+                id="periodo-generacion-alicuotas"
+                type="month"
+                value={periodoMasivo || periodoGestion}
+                onChange={(e) => setPeriodoMasivo(e.target.value)}
+                style={{ ...inputStyle, padding: "8px 10px", fontSize: 13, borderRadius: 9, maxWidth: 170 }}
+              />
             </div>
 
             <button
               onClick={() => {
-                generarAlicuotasMasivas(periodoGestion);
+                generarAlicuotasMasivas(periodoMasivo || periodoGestion);
               }}
               style={primaryButton}
             >
@@ -2434,7 +2502,15 @@ export default function Pagos() {
                 </div>
 
                 <EstadoBadge
-                  estado={p.estado}
+                  estado={(() => {
+                    const saldo = Number(p.saldo_pendiente ?? (Number(p.valor || 0) - Number(p.valor_pagado || 0)));
+                    const fecha = String(p.fecha_vencimiento || "").slice(0, 10);
+                    const hoy = new Date().toISOString().slice(0, 10);
+                    const estado = String(p.estado || "").toUpperCase();
+                    if (estado === "PAGADO" || estado === "ANULADO" || saldo <= 0) return estado;
+                    if (fecha && fecha < hoy) return "VENCIDO";
+                    return estado === "VENCIDO" ? "PENDIENTE" : estado;
+                  })()}
                 />
 
               </div>
@@ -2531,37 +2607,33 @@ export default function Pagos() {
 
                       <input
                         placeholder="Número de referencia bancaria de la transacción"
-                        value={
-                          referenciaPago
-                        }
+                        value={obtenerFormularioPago(String(p.id)).referenciaPago}
                         onChange={(e) =>
-                          setReferenciaPago(
-                            e.target.value
-                          )
+                          actualizarFormularioPago(String(p.id), {
+                            referenciaPago: e.target.value,
+                          })
                         }
                         style={inputStyle}
                       />
 
                       <input
                         placeholder="Nombre del banco donde realizó la transferencia o depósito"
-                        value={banco}
+                        value={obtenerFormularioPago(String(p.id)).banco}
                         onChange={(e) =>
-                          setBanco(
-                            e.target.value
-                          )
+                          actualizarFormularioPago(String(p.id), {
+                            banco: e.target.value,
+                          })
                         }
                         style={inputStyle}
                       />
 
                       <input
                         type="date"
-                        value={
-                          fechaTransferencia
-                        }
+                        value={obtenerFormularioPago(String(p.id)).fechaTransferencia}
                         onChange={(e) =>
-                          setFechaTransferencia(
-                            e.target.value
-                          )
+                          actualizarFormularioPago(String(p.id), {
+                            fechaTransferencia: e.target.value,
+                          })
                         }
                         style={inputStyle}
                       />
@@ -2584,9 +2656,9 @@ export default function Pagos() {
                               e.target.files[0]
                             ) {
 
-                              setComprobante(
-                                e.target.files[0]
-                              );
+                              actualizarFormularioPago(String(p.id), {
+                                comprobante: e.target.files[0],
+                              });
 
                             }
 
@@ -2621,8 +2693,8 @@ export default function Pagos() {
                             fontSize: 13,
                           }}
                         >
-                          {comprobante
-                            ? `Archivo seleccionado: ${comprobante.name}`
+                          {obtenerFormularioPago(String(p.id)).comprobante
+                            ? `Archivo seleccionado: ${obtenerFormularioPago(String(p.id)).comprobante.name}`
                             : "Seleccione la imagen del comprobante de transferencia o depósito."}
                         </div>
                       </div>

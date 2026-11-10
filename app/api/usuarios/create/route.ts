@@ -205,7 +205,14 @@ export async function POST(req: Request) {
         condominio_id: condominioId,
         activo: true,
         password_temporal: true,
-        puede_votar: rol === "DIRECTIVA" ? Boolean(body.puede_votar) : false,
+        // DIRECTIVA y ADMIN pueden recibir el permiso de voto desde su formulario.
+        // Para los demás roles, el permiso permanece desactivado.
+        puede_votar:
+          rol === "DIRECTIVA"
+            ? Boolean(body.puede_votar)
+            : rol === "ADMIN"
+              ? body.puede_votar === true
+              : false,
         cargo_directiva: rol === "DIRECTIVA" ? cargoDirectiva : null,
       })
       .select("id")
